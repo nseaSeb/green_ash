@@ -7,7 +7,8 @@ par **introspection** depuis vos resources Ash — zéro code d'UI.
 .
 ├── green_ash/        # la librairie (package :green_ash), sans couplage à l'app hôte
 └── examples/
-    └── bank/         # app Phoenix + Ash de démonstration qui monte la console
+    ├── bank/         # démo (Account/Transaction, policies, acteur, filtres)
+    └── library/      # démo bootstrap fraîche (Author/Book) + installeur exécuté réellement
 ```
 
 ## La librairie — `green_ash/`
@@ -55,3 +56,19 @@ mix test               # tests d'intégration à travers la console montée
 La resource de démo `Bank.Ledger.Account` (`lib/bank/ledger/account.ex`) illustre les
 bonnes pratiques : `description` sur resource/actions, action métier avec argument
 (`open`/`credit`), read filtrable (`search`), policy `destroy` réservée à un acteur.
+`Bank.Ledger.Transaction` (`belongs_to :account`) éprouve le rendu d'une clé étrangère.
+
+## L'exemple — `examples/library/`
+
+App bootstrap **de zéro** (jamais connue de `green_ash` avant `mix green_ash.install`) :
+domaine `Library.Catalog` avec `Author` (`has_many :books`) et `Book`
+(`belongs_to :author`), une seconde relation testée sur une resource différente.
+Sert de répétition générale de l'installeur avant publication Hex.
+
+```bash
+cd examples/library
+mix deps.get
+mix ash.setup          # crée library_dev + migrations
+mix phx.server          # http://localhost:4201  (port distinct de bank/4200)
+mix test
+```

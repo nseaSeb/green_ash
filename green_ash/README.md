@@ -14,6 +14,11 @@ mix igniter.install green_ash
 Ça ajoute la dépendance, **découvre automatiquement vos domaines Ash** et patche
 votre routeur. Rien d'autre à écrire.
 
+> Si vous préférez lancer `mix green_ash.install` directement (sans passer par
+> `mix igniter.install`), votre projet doit déjà avoir `{:igniter, "~> 0.5", only: [:dev, :test]}`
+> dans ses propres dépendances — Mix ne propage pas les dépendances `only:` d'une
+> lib vers ses consommateurs. `mix igniter.install green_ash` s'en charge pour vous.
+
 ### Manuellement
 
 Si vous préférez ne pas utiliser Igniter, ou pour comprendre ce que fait
@@ -67,4 +72,5 @@ actions améliorent les libellés affichés (facultatif).
 mix test        # aucun Postgres requis : harnais Ash.DataLayer.Ets
 ```
 
-Voir `examples/bank/` (dans le monorepo) pour un exemple complet sur Postgres.
+Voir `examples/bank/` et `examples/library/` (dans le monorepo) pour des exemples
+complets sur Postgres.
