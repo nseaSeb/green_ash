@@ -45,4 +45,39 @@ defmodule BuisWeb.Cli.Registry do
   def action_label(action) do
     action.description || Phoenix.Naming.humanize(action.name)
   end
+
+  @doc """
+  Encode la clé primaire d'un enregistrement en un token pour URL/formulaire.
+
+  PK simple -> la valeur brute (ex. l'UUID), rétrocompatible. PK composite ->
+  un token base64url d'un JSON `{champ => valeur}`.
+  """
+  def encode_pk(%resource{} = record) do
+    case Ash.Resource.Info.primary_key(resource) do
+      [single] ->
+        to_string(Map.get(record, single))
+
+      fields ->
+        fields
+        |> Map.new(fn f -> {to_string(f), to_string(Map.get(record, f))} end)
+        |> Jason.encode!()
+        |> Base.url_encode64(padding: false)
+    end
+  end
+
+  @doc "Décode un token de clé primaire en identifiant utilisable par `Ash.get/2`."
+  def decode_pk(resource, token) do
+    case Ash.Resource.Info.primary_key(resource) do
+      [_single] ->
+        {:ok, token}
+
+      fields ->
+        with {:ok, bin} <- Base.url_decode64(token, padding: false),
+             {:ok, map} <- Jason.decode(bin) do
+          {:ok, Map.new(fields, fn f -> {f, map[to_string(f)]} end)}
+        else
+          _ -> :error
+        end
+    end
+  end
 end

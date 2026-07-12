@@ -31,7 +31,6 @@ defmodule BuisWeb.CliLive.Subfile do
            resource: resource,
            action: action,
            actor: Actor.from_session(session),
-           pk: primary_key_field(resource),
            codes: build_codes(resource),
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
            arg_specs: Field.specs(resource, action),
@@ -46,11 +45,6 @@ defmodule BuisWeb.CliLive.Subfile do
          |> assign_filter_form()
          |> load_rows(), layout: false}
     end
-  end
-
-  # Champ de clé primaire (PK simple ; sinon le 1er champ).
-  defp primary_key_field(resource) do
-    resource |> Ash.Resource.Info.primary_key() |> List.first()
   end
 
   defp assign_filter_form(socket),
@@ -120,8 +114,17 @@ defmodule BuisWeb.CliLive.Subfile do
   end
 
   def handle_event("process", %{"opt" => opts}, socket) do
+    # Les options sont indexées par PK encodée : on résout vers les enregistrements
+    # déjà chargés (pas de requête supplémentaire, robuste aux PK composites).
+    by_token = Map.new(socket.assigns.rows, &{Registry.encode_pk(&1), &1})
+
     entries =
-      for {id, code} <- opts, trimmed = String.trim(code), trimmed != "", do: {id, trimmed}
+      for {token, code} <- opts,
+          c = String.trim(code),
+          c != "",
+          rec = by_token[token],
+          rec != nil,
+          do: {rec, c}
 
     process(entries, socket)
   end
@@ -132,11 +135,9 @@ defmodule BuisWeb.CliLive.Subfile do
     actor = socket.assigns.actor
 
     results =
-      Enum.map(socket.assigns.confirm, fn {id, action} ->
-        with {:ok, record} <- Ash.get(socket.assigns.resource, id, actor: actor),
-             :ok <- Ash.destroy(record, action: action, actor: actor) do
-          :ok
-        else
+      Enum.map(socket.assigns.confirm, fn {record, action} ->
+        case Ash.destroy(record, action: action, actor: actor) do
+          :ok -> :ok
           {:error, %Ash.Error.Forbidden{}} -> :forbidden
           _ -> :error
         end
@@ -169,38 +170,52 @@ defmodule BuisWeb.CliLive.Subfile do
 
   defp process(entries, socket) do
     codes = socket.assigns.codes
-    resolved = Enum.map(entries, fn {id, code} -> {id, Enum.find(codes, &(&1.code == code))} end)
 
-    unknown = for {_id, nil} <- resolved, do: :x
-    displays = for {id, %{kind: :display}} <- resolved, do: id
-    destroys = for {id, %{kind: :destroy, action: a}} <- resolved, do: {id, a}
+    resolved =
+      Enum.map(entries, fn {rec, code} -> {rec, Enum.find(codes, &(&1.code == code))} end)
 
-    update =
-      Enum.find_value(resolved, fn
-        {id, %{kind: :update, action: a}} -> {id, a}
-        _ -> nil
-      end)
+    unknown = for {_rec, nil} <- resolved, do: :x
+    displays = for {rec, %{kind: :display}} <- resolved, do: rec
+    destroys = for {rec, %{kind: :destroy, action: a}} <- resolved, do: {rec, a}
+    updates = for {rec, %{kind: :update, action: a}} <- resolved, do: {rec, a}
 
     cond do
       # Les suppressions passent par un écran de confirmation (façon AS400).
       destroys != [] ->
-        {:noreply, assign(socket, confirm: destroys, message: "Confirmez la suppression.")}
+        note =
+          if updates != [], do: " (modifications ignorées : traitez-les séparément)", else: ""
 
-      update ->
-        {id, action} = update
+        {:noreply,
+         assign(socket, confirm: destroys, message: "Confirmez la suppression." <> note)}
+
+      # Une action de modification demande un écran dédié : une seule à la fois.
+      length(updates) > 1 ->
+        {:noreply,
+         socket
+         |> assign(
+           expanded: display_set(displays),
+           message: "Une seule ligne à modifier à la fois (#{length(updates)} sélectionnées)."
+         )
+         |> load_rows()}
+
+      match?([_], updates) ->
+        [{rec, action}] = updates
 
         {:noreply,
          push_navigate(socket,
-           to: ~p"/cli/r/#{Registry.resource_slug(socket.assigns.resource)}/a/#{action}/#{id}"
+           to:
+             ~p"/cli/r/#{Registry.resource_slug(socket.assigns.resource)}/a/#{action}/#{Registry.encode_pk(rec)}"
          )}
 
       true ->
         {:noreply,
          socket
-         |> assign(expanded: MapSet.new(displays), message: message([], displays, unknown))
+         |> assign(expanded: display_set(displays), message: message([], displays, unknown))
          |> load_rows()}
     end
   end
+
+  defp display_set(records), do: records |> Enum.map(&Registry.encode_pk/1) |> MapSet.new()
 
   defp destroy_message(results) do
     done = Enum.count(results, &(&1 == :ok))
@@ -281,18 +296,18 @@ defmodule BuisWeb.CliLive.Subfile do
             </thead>
             <tbody>
               <%= for row <- @rows do %>
-                <tr class={expanded?(@expanded, row, @pk) && "exp"}>
+                <tr class={expanded?(@expanded, row) && "exp"}>
                   <td>
                     <input
                       class="sf-opt"
-                      name={"opt[#{Map.get(row, @pk)}]"}
+                      name={"opt[#{Registry.encode_pk(row)}]"}
                       maxlength="2"
                       autocomplete="off"
                     />
                   </td>
                   <td :for={col <- @columns}>{cell(row, col)}</td>
                 </tr>
-                <tr :if={expanded?(@expanded, row, @pk)} class="exp">
+                <tr :if={expanded?(@expanded, row)} class="exp">
                   <td></td>
                   <td colspan={length(@columns)}>
                     <pre class="crt-pre">{inspect(row, pretty: true, limit: :infinity)}</pre>
@@ -353,7 +368,7 @@ defmodule BuisWeb.CliLive.Subfile do
   defp sort_indicator({field, :desc}, field), do: " ▼"
   defp sort_indicator(_sort, _col), do: ""
 
-  defp expanded?(set, row, pk), do: MapSet.member?(set, to_string(Map.get(row, pk)))
+  defp expanded?(set, row), do: MapSet.member?(set, Registry.encode_pk(row))
 
   defp cell(row, col), do: row |> Map.get(col) |> fmt() |> truncate()
 

@@ -137,6 +137,37 @@ defmodule BuisWeb.CliLive.SubfileTest do
     assert page1 =~ "Page 1"
   end
 
+  test "deux modifications sélectionnées : refus avec feedback", %{conn: conn} do
+    a = open_account("Alice", "1")
+    b = open_account("Bob", "1")
+
+    {:ok, view, _html} = live(conn, @list)
+
+    html =
+      view
+      |> form("form[phx-submit='process']", %{"opt" => %{a.id => "2", b.id => "2"}})
+      |> render_submit()
+
+    assert html =~ "Une seule ligne à modifier"
+    refute html =~ "Renseignez les champs"
+  end
+
+  test "suppression + modification : confirme la suppression, signale l'ignoré", %{conn: conn} do
+    actor = open_account("Chef", "0")
+    a = open_account("Alice", "1")
+    b = open_account("Bob", "1")
+
+    {:ok, view, _html} = live(with_actor(conn, actor), @list)
+
+    html =
+      view
+      |> form("form[phx-submit='process']", %{"opt" => %{a.id => "4", b.id => "2"}})
+      |> render_submit()
+
+    assert html =~ "Confirmer la suppression"
+    assert html =~ "modifications ignorées"
+  end
+
   test "tri par colonne (Holder) : asc puis desc", %{conn: conn} do
     open_account("Charlie", "1")
     open_account("Alice", "1")

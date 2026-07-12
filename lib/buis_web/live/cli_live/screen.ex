@@ -48,9 +48,11 @@ defmodule BuisWeb.CliLive.Screen do
 
   defp load_subject(resource, nil, _actor), do: {:ok, resource}
 
-  defp load_subject(resource, id, actor) do
-    case Ash.get(resource, id, actor: actor) do
-      {:ok, record} -> {:ok, record}
+  defp load_subject(resource, token, actor) do
+    with {:ok, id} <- Registry.decode_pk(resource, token),
+         {:ok, record} <- Ash.get(resource, id, actor: actor) do
+      {:ok, record}
+    else
       _ -> :error
     end
   end
