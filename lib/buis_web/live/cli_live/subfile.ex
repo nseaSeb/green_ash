@@ -14,7 +14,7 @@ defmodule BuisWeb.CliLive.Subfile do
   alias BuisWeb.Cli.{Actor, Registry}
   alias BuisWeb.CliLive.{Command, Field, UI}
 
-  @limit 200
+  @per_page 20
 
   @impl true
   def mount(%{"resource" => slug, "action" => action_name}, session, socket) do
@@ -36,6 +36,8 @@ defmodule BuisWeb.CliLive.Subfile do
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
            arg_specs: Field.specs(resource, action),
            args: %{},
+           page: 0,
+           has_next: false,
            expanded: MapSet.new(),
            confirm: [],
            message: ""
@@ -54,15 +56,17 @@ defmodule BuisWeb.CliLive.Subfile do
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
 
   defp load_rows(socket) do
-    %{resource: resource, action: action, args: args, actor: actor} = socket.assigns
+    %{resource: resource, action: action, args: args, actor: actor, page: page} = socket.assigns
 
-    rows =
+    # On demande une ligne de plus que la page pour détecter s'il en reste.
+    fetched =
       resource
       |> Ash.Query.for_read(action.name, args, actor: actor)
-      |> Ash.Query.limit(@limit)
+      |> Ash.Query.limit(@per_page + 1)
+      |> Ash.Query.offset(page * @per_page)
       |> Ash.read!(actor: actor)
 
-    assign(socket, rows: rows)
+    assign(socket, rows: Enum.take(fetched, @per_page), has_next: length(fetched) > @per_page)
   end
 
   # Codes d'option applicables à une ligne, dérivés des actions de la resource.
@@ -88,7 +92,18 @@ defmodule BuisWeb.CliLive.Subfile do
 
   @impl true
   def handle_event("filter", %{"filter" => params}, socket) do
-    {:noreply, socket |> assign(args: params) |> assign_filter_form() |> load_rows()}
+    # Un changement de filtre repart de la première page.
+    {:noreply, socket |> assign(args: params, page: 0) |> assign_filter_form() |> load_rows()}
+  end
+
+  def handle_event("page", %{"dir" => "next"}, socket) do
+    if socket.assigns.has_next,
+      do: {:noreply, socket |> update(:page, &(&1 + 1)) |> load_rows()},
+      else: {:noreply, socket}
+  end
+
+  def handle_event("page", %{"dir" => "prev"}, socket) do
+    {:noreply, socket |> update(:page, &max(&1 - 1, 0)) |> load_rows()}
   end
 
   def handle_event("process", %{"opt" => opts}, socket) do
@@ -275,6 +290,28 @@ defmodule BuisWeb.CliLive.Subfile do
           <p :if={@rows == []} class="crt-detail">(aucun enregistrement)</p>
           <button type="submit" class="btn" style="margin-top:.8rem">Valider ⏎</button>
         </form>
+
+        <div class="crt-pager">
+          <button
+            type="button"
+            class="crt-linkbtn"
+            phx-click="page"
+            phx-value-dir="prev"
+            disabled={@page == 0}
+          >
+            ‹ Préc
+          </button>
+          <span>Page {@page + 1}</span>
+          <button
+            type="button"
+            class="crt-linkbtn"
+            phx-click="page"
+            phx-value-dir="next"
+            disabled={!@has_next}
+          >
+            Suiv ›
+          </button>
+        </div>
       </div>
 
       <div class="crt-foot">

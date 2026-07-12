@@ -120,4 +120,23 @@ defmodule BuisWeb.CliLive.SubfileTest do
     assert filtered =~ "Alice"
     refute filtered =~ "Bob"
   end
+
+  test "pagination : 20 par page, navigation Suiv/Préc", %{conn: conn} do
+    for i <- 1..25, do: open_account("Acc#{String.pad_leading("#{i}", 2, "0")}", "1")
+
+    {:ok, view, html} = live(conn, @list)
+    assert row_count(html) == 20
+    assert html =~ "Page 1"
+
+    page2 = view |> element("button", "Suiv") |> render_click()
+    assert row_count(page2) == 5
+    assert page2 =~ "Page 2"
+
+    page1 = view |> element("button", "Préc") |> render_click()
+    assert row_count(page1) == 20
+    assert page1 =~ "Page 1"
+  end
+
+  # Nombre de lignes de données = nombre de champs "Opt" rendus.
+  defp row_count(html), do: length(String.split(html, ~s(name="opt[))) - 1
 end

@@ -63,6 +63,8 @@ defmodule BuisWeb.CliLive.UI do
       .crt-confirm p { margin:0; flex:1; }
       .crt-filter { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:.8rem; }
       .crt-filter .fieldset { margin:0; max-width:260px; }
+      .crt-pager { display:flex; gap:1rem; align-items:center; margin-top:1rem; }
+      .crt-linkbtn:disabled { opacity:.35; cursor:default; }
     </style>
     """
   end
