@@ -2,8 +2,9 @@ defmodule GreenAsh.MixProject do
   use Mix.Project
 
   @version "0.1.0"
-  # TODO avant `mix hex.publish` : remplacer par l'URL réelle du dépôt GitHub.
-  @source_url "TODO_SET_GITHUB_URL_BEFORE_PUBLISH"
+  # Monorepo : le dépôt racine contient aussi les exemples (bank/, library/),
+  # donc on pointe précisément sur le sous-dossier de la lib.
+  @source_url "https://github.com/nseaSeb/green_ash/tree/main/green_ash"
 
   def project do
     [
@@ -43,8 +44,7 @@ defmodule GreenAsh.MixProject do
   end
 
   defp description do
-    "Console de test « écran vert » (LiveView, 100% clavier, style AS400) " <>
-      "générée par introspection depuis vos resources Ash — zéro code d'UI."
+    "A keyboard-driven LiveView console to probe your Ash resources — zero UI code."
   end
 
   defp package do
