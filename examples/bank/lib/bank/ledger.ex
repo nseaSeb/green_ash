@@ -6,5 +6,6 @@ defmodule Bank.Ledger do
 
   resources do
     resource Bank.Ledger.Account
+    resource Bank.Ledger.Transaction
   end
 end

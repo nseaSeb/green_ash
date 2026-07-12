@@ -73,4 +73,25 @@ defmodule BankWeb.ConsoleTest do
     {:ok, _view, html} = live(recycle(conn), "/cli")
     assert html =~ "Account:"
   end
+
+  test "relation belongs_to : le menu liste Transaction, account_id se rend en texte, création OK",
+       %{conn: conn} do
+    {:ok, _view, menu_html} = live(conn, "/cli")
+    assert menu_html =~ "Transactions"
+
+    acc = open_account("Alice", "100")
+
+    {:ok, view, html} = live(conn, "/cli/r/transaction/a/create")
+    # Ash.Type.UUID doit se rendre en champ texte, pas en fallback textarea/JSON.
+    assert html =~ ~s(type="text" id="form_account_id" name="form[account_id]")
+
+    view
+    |> form("form[phx-submit='submit']", form: %{"account_id" => acc.id, "amount" => "42"})
+    |> render_submit()
+
+    assert Enum.any?(
+             Ash.read!(Bank.Ledger.Transaction, authorize?: false),
+             &(&1.account_id == acc.id and Decimal.equal?(&1.amount, Decimal.new("42")))
+           )
+  end
 end
