@@ -27,10 +27,27 @@ La découverte se fait via la config `:ash_domains` (`config/config.exs`).
   via `AshPhoenix.Form`, champs déduits par `BuisWeb.CliLive.Field` (type Ash → widget, fallback
   JSON). `:id` = mode update sur un enregistrement.
 - `BuisWeb.CliLive.Field` — mapper type Ash → `type=` HTML (+ options d'enum, fallback textarea).
-- `BuisWeb.CliLive.Command` — parseur de la ligne `:` (`:menu :list <r> :new <r> :debug :help :q`).
+- `BuisWeb.CliLive.Command` — parseur + application de la ligne `:`
+  (`:menu :list <r> :new <r> :actor <r> <id> :actor none :whoami :debug :help :q`).
+- `BuisWeb.Cli.Actor` + `BuisWeb.CliActorController` — « acteur » de la console,
+  stocké en session (le contrôleur l'écrit ; une LiveView ne peut pas via le socket),
+  threadé dans tous les appels Ash (`actor:`) pour éprouver les policies.
 - `BuisWeb.CliLive.UI` — feuille de style « terminal vert » partagée.
 
 Les routes `/cli` sont **dev-only** (bloc `dev_routes` du routeur).
+
+### Acteur & policies
+
+`Account` porte `Ash.Policy.Authorizer` (dép. `:picosat_elixir` requise). Exemple :
+`destroy` exige un acteur (`actor_present()`), le reste est libre. Dans la console :
+`:actor account <id>` pour agir en tant que ce compte, `:actor none` pour redevenir
+anonyme, `:whoami` pour vérifier — l'acteur courant est affiché dans l'en-tête (`◆ …`).
+
+### Filtres de liste
+
+Si une read action a des **arguments**, le subfile les rend comme barre de filtre
+(côté requête, toute la table) via `Ash.Query.for_read`. Cf. `Account.read :search`
+(argument `holder`, `filter expr(contains(...))`).
 
 ## Ajouter une resource → elle apparaît seule dans `/cli`
 
