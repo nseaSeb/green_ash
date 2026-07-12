@@ -2,7 +2,8 @@ defmodule GreenAsh.MixProject do
   use Mix.Project
 
   @version "0.1.0"
-  @source_url "https://example.com/green_ash"
+  # TODO avant `mix hex.publish` : remplacer par l'URL réelle du dépôt GitHub.
+  @source_url "TODO_SET_GITHUB_URL_BEFORE_PUBLISH"
 
   def project do
     [

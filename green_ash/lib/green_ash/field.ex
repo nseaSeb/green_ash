@@ -56,7 +56,7 @@ defmodule GreenAsh.Field do
       enum_values(type, constraints) != nil ->
         "select"
 
-      type in [Ash.Type.String, Ash.Type.CiString] ->
+      type in [Ash.Type.String, Ash.Type.CiString, Ash.Type.UUID, Ash.Type.UUIDv7] ->
         "text"
 
       type == Ash.Type.Integer ->
