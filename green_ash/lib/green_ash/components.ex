@@ -69,6 +69,7 @@ defmodule GreenAsh.Components do
     """
   end
 
+  @doc "Bouton stylé « terminal »."
   attr :type, :string, default: "text"
   slot :inner_block, required: true
   attr :rest, :global, include: ~w(disabled)
@@ -79,6 +80,11 @@ defmodule GreenAsh.Components do
     """
   end
 
+  @doc """
+  Champ de formulaire générique, piloté par un `Phoenix.HTML.FormField` — le
+  `type` (déduit par `GreenAsh.Field`) sélectionne le widget rendu (texte,
+  nombre, date, checkbox, select, textarea).
+  """
   attr :field, Phoenix.HTML.FormField, required: true
   attr :type, :string, default: "text"
   attr :label, :string, default: nil

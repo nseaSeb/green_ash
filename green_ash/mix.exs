@@ -17,7 +17,8 @@ defmodule GreenAsh.MixProject do
       description: description(),
       package: package(),
       name: "GreenAsh",
-      source_url: @source_url
+      source_url: @source_url,
+      docs: docs()
     ]
   end
 
@@ -39,7 +40,8 @@ defmodule GreenAsh.MixProject do
       {:picosat_elixir, "~> 0.2", only: [:dev, :test]},
       {:lazy_html, ">= 0.1.0", only: :test},
       # Pour `mix green_ash.install` (patch automatique du routeur hôte).
-      {:igniter, "~> 0.5", only: [:dev, :test]}
+      {:igniter, "~> 0.5", only: [:dev, :test]},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 
@@ -51,6 +53,32 @@ defmodule GreenAsh.MixProject do
     [
       licenses: ["MIT"],
       links: %{"Source" => @source_url}
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
+      source_ref: "main",
+      # Le dépôt est un monorepo (bank/, library/ à côté) : la lib vit dans le
+      # sous-dossier `green_ash/`, donc on force le pattern des liens "View
+      # Source" plutôt que de laisser ex_doc les déduire de `source_url` (qui
+      # pointe déjà vers ce sous-dossier pour l'affichage humain sur Hex).
+      source_url_pattern:
+        "https://github.com/nseaSeb/green_ash/blob/main/green_ash/%{path}#L%{line}",
+      groups_for_modules: [
+        Core: [GreenAsh.Registry, GreenAsh.Field, GreenAsh.Actor, GreenAsh.Command],
+        "Web Integration": [
+          GreenAsh.Router,
+          GreenAsh.Web,
+          GreenAsh.OnMount,
+          GreenAsh.ActorController,
+          GreenAsh.Components
+        ],
+        LiveViews: [GreenAsh.Live.Menu, GreenAsh.Live.Screen, GreenAsh.Live.Subfile],
+        "Mix Tasks": [Mix.Tasks.GreenAsh.Install]
+      ]
     ]
   end
 end

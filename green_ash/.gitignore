@@ -5,3 +5,5 @@
 erl_crash.dump
 *.ez
 green_ash-*.tar
+# Une librairie ne versionne pas son mix.lock (résolu par le consommateur).
+mix.lock

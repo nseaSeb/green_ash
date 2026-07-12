@@ -16,6 +16,14 @@ defmodule GreenAsh.Router do
   de la console et la route d'acteur, en injectant domaines + base via `on_mount`.
   """
 
+  @doc """
+  Monte la console sous `path`, dans le `scope` courant.
+
+  ## Options
+
+    * `:domains` (requis) — liste des modules `Ash.Domain` dont les resources
+      doivent être exposées (menu, listes, actions, acteur/policies).
+  """
   defmacro green_ash(path, opts \\ []) do
     quote bind_quoted: [path: path, opts: opts] do
       domains = opts |> Keyword.fetch!(:domains) |> Enum.map(&Atom.to_string/1)
