@@ -12,7 +12,13 @@ par **introspection** depuis vos resources Ash — zéro code d'UI.
 
 ## La librairie — `green_ash/`
 
-Montée dans le routeur de l'hôte via une macro :
+Installation en une commande (découvre vos domaines Ash, patche le routeur) :
+
+```bash
+mix igniter.install green_ash
+```
+
+Ou manuellement — ajouter la dépendance et monter la macro dans le routeur :
 
 ```elixir
 import GreenAsh.Router
@@ -22,6 +28,8 @@ scope "/" do
   green_ash "/cli", domains: [MyApp.Bank]
 end
 ```
+
+Voir `green_ash/README.md` pour le détail.
 
 Une resource Ash déclarée dans un domaine exposé apparaît alors dans `/cli` :
 menu → listes (filtre + tri + pagination) → création / update métier / suppression

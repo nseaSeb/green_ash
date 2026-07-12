@@ -1,8 +1,6 @@
 defmodule BankWeb.Router do
   use BankWeb, :router
 
-  import GreenAsh.Router
-
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -42,10 +40,14 @@ defmodule BankWeb.Router do
       live_dashboard "/dashboard", metrics: BankWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
+  end
 
-    # Console de test GreenAsh (dev uniquement), montée par la macro de la lib.
+  if Application.compile_env(:bank, :dev_routes) do
+    import GreenAsh.Router
+
     scope "/" do
       pipe_through :browser
+
       green_ash("/cli", domains: [Bank.Ledger])
     end
   end

@@ -35,7 +35,9 @@ defmodule GreenAsh.MixProject do
       {:jason, "~> 1.2"},
       # Solveur SAT requis dès qu'une resource hôte utilise Ash.Policy.Authorizer.
       {:picosat_elixir, "~> 0.2", only: [:dev, :test]},
-      {:lazy_html, ">= 0.1.0", only: :test}
+      {:lazy_html, ">= 0.1.0", only: :test},
+      # Pour `mix green_ash.install` (patch automatique du routeur hôte).
+      {:igniter, "~> 0.5", only: [:dev, :test]}
     ]
   end
 
