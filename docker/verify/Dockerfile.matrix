@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.7
+#
+# Couche 1/3 : compile + test de green_ash seul, en salle blanche (aucun
+# cache Hex/Mix de la machine hôte, aucun _build/deps local), à une version
+# Elixir/OTP donnée. Rejoué sur une matrice de versions par verify.sh.
+#
+# Contexte de build attendu : green_ash/ (voir verify.sh).
+ARG ELIXIR_TAG=1.19-otp-28
+FROM elixir:${ELIXIR_TAG}
+
+RUN mix local.hex --force && mix local.rebar --force
+
+WORKDIR /app
+COPY . .
+
+RUN mix deps.get
+RUN mix compile --warnings-as-errors
+RUN mix format --check-formatted
+RUN mix test

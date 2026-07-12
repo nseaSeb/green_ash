@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1.7
+#
+# Couche 2/3 : répétition de l'installation, en conditions vraiment fraîches
+# (aucun projet préexistant, aucune app "déjà rodée" comme examples/library).
+# Voir rehearsal.sh pour le scénario exécuté.
+FROM elixir:1.19-otp-28
+
+RUN mix local.hex --force && mix local.rebar --force \
+  && mix archive.install hex igniter_new --force \
+  && mix archive.install hex phx_new --force
+
+# Client psql pour vérifier la DB, inotify-tools pour les watchers Phoenix.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client inotify-tools \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+COPY docker/verify/rehearsal.sh /usr/local/bin/rehearsal.sh
+RUN chmod +x /usr/local/bin/rehearsal.sh
+
+CMD ["/usr/local/bin/rehearsal.sh"]

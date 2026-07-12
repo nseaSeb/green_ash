@@ -3,6 +3,22 @@
 Une console de test « écran vert » (LiveView, 100 % clavier, style AS400) générée
 par **introspection** depuis vos resources Ash — zéro code d'UI.
 
+## Prérequis
+
+Un projet Phoenix + Ash existant. Si vous partez de zéro :
+
+```bash
+mix archive.install hex igniter_new
+mix archive.install hex phx_new
+mix igniter.new mon_app --with phx.new --yes
+cd mon_app
+mix igniter.install ash,ash_phoenix,ash_postgres --yes
+```
+
+(En deux étapes séparées plutôt qu'en une seule commande combinée : plus
+fiable en pratique.) Voir le
+[Getting Started d'Ash](https://hexdocs.pm/ash/get-started.html) pour le détail.
+
 ## Installation
 
 Avec [Igniter](https://hexdocs.pm/igniter) (recommandé — une seule commande) :

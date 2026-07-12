@@ -26,6 +26,23 @@ defmodule BankWeb.ConsoleTest do
     assert html =~ "Comptes bancaires"
   end
 
+  test "les domaines sont lus dynamiquement (config :bank, :ash_domains), pas figés au routeur",
+       %{conn: conn} do
+    # Régression : un domaine ajouté APRÈS `mix green_ash.install` (ou retiré
+    # de la config) doit se refléter immédiatement, sans toucher au routeur.
+    original = Application.get_env(:bank, :ash_domains)
+    on_exit(fn -> Application.put_env(:bank, :ash_domains, original) end)
+
+    Application.put_env(:bank, :ash_domains, [])
+    {:ok, _view, html} = live(conn, "/cli")
+    refute html =~ "Comptes bancaires"
+    assert html =~ "aucune resource exposée"
+
+    Application.put_env(:bank, :ash_domains, original)
+    {:ok, _view2, html2} = live(conn, "/cli")
+    assert html2 =~ "Comptes bancaires"
+  end
+
   test "création via l'écran générique", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/cli/r/account/a/open")
 

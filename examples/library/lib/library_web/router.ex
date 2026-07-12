@@ -48,7 +48,7 @@ defmodule LibraryWeb.Router do
     scope "/" do
       pipe_through :browser
 
-      green_ash("/cli", domains: [Library.Catalog])
+      green_ash("/cli")
     end
   end
 end

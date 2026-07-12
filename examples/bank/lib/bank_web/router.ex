@@ -48,7 +48,7 @@ defmodule BankWeb.Router do
     scope "/" do
       pipe_through :browser
 
-      green_ash("/cli", domains: [Bank.Ledger])
+      green_ash("/cli")
     end
   end
 end

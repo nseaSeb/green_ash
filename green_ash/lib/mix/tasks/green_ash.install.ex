@@ -9,9 +9,10 @@ defmodule Mix.Tasks.GreenAsh.Install.Docs do
     """
     #{short_doc()}
 
-    Adds `import GreenAsh.Router` and a `green_ash "/cli", domains: [...]` scope
-    to your Phoenix router, gated behind `:dev_routes` (only enabled in dev).
-    The list of domains is auto-discovered from your Ash configuration.
+    Adds `import GreenAsh.Router` and a `green_ash "/cli"` scope to your Phoenix
+    router, gated behind `:dev_routes` (only enabled in dev). Exposed domains
+    are read dynamically from your `:ash_domains` config at runtime, so newly
+    added domains show up automatically — no need to re-run this installer.
 
     ## Example
 
@@ -54,14 +55,12 @@ if Code.ensure_loaded?(Igniter) do
       {igniter, router} =
         Igniter.Libs.Phoenix.select_router(igniter, "Which router should GreenAsh be added to?")
 
-      {igniter, domains} = Ash.Domain.Igniter.list_domains(igniter)
-
       igniter
       |> Igniter.Project.Formatter.import_dep(:green_ash)
-      |> add_to_router(app_name, router, domains)
+      |> add_to_router(app_name, router)
     end
 
-    defp add_to_router(igniter, _app_name, nil, _domains) do
+    defp add_to_router(igniter, _app_name, nil) do
       Igniter.add_warning(igniter, """
       No Phoenix router found or selected. Please ensure that Phoenix is set up
       and then run this installer again with
@@ -70,11 +69,9 @@ if Code.ensure_loaded?(Igniter) do
       """)
     end
 
-    defp add_to_router(igniter, app_name, router, domains) do
+    defp add_to_router(igniter, app_name, router) do
       {igniter, has_browser_pipeline?} =
         Igniter.Libs.Phoenix.has_pipeline(igniter, router, :browser)
-
-      domains_source = domains |> Enum.map(&inspect/1) |> Enum.join(", ")
 
       Igniter.Project.Module.find_and_update_module!(igniter, router, fn zipper ->
         case Igniter.Code.Common.move_to(
@@ -91,7 +88,7 @@ if Code.ensure_loaded?(Igniter) do
                   scope "/" do
                     pipe_through :browser
 
-                    green_ash "/cli", domains: [#{domains_source}]
+                    green_ash "/cli"
                   end
                 end
                 """
@@ -111,7 +108,7 @@ if Code.ensure_loaded?(Igniter) do
                   scope "/" do
                     pipe_through :green_ash_browser
 
-                    green_ash "/cli", domains: [#{domains_source}]
+                    green_ash "/cli"
                   end
                 end
                 """
