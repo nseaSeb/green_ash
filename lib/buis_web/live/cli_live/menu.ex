@@ -7,9 +7,11 @@ defmodule BuisWeb.CliLive.Menu do
     * MAIN     : la liste des resources Ash exposées ;
     * RESOURCE : la liste des actions de la resource sélectionnée.
 
-  Choisir une action de type `:create` ouvre l'écran de saisie
-  (`BuisWeb.CliLive.Screen`) ; les autres types sont annoncés comme à venir
-  (Étape 3 : listes / sélection d'enregistrement).
+  Selon le type d'action choisie : `:create` -> écran de saisie
+  (`BuisWeb.CliLive.Screen`), `:read` -> liste (`BuisWeb.CliLive.Subfile`),
+  `:update`/`:destroy` -> renvoi vers une liste (ils s'exécutent sur un
+  enregistrement sélectionné). Une ligne de commande `:` (façon Vim) complète
+  la sélection numérotée.
   """
   use BuisWeb, :live_view
 
@@ -21,18 +23,26 @@ defmodule BuisWeb.CliLive.Menu do
     {:ok,
      socket
      |> assign(level: :main, resource: nil, message: "")
-     |> assign_options(),
-     layout: false}
+     |> assign_options(), layout: false}
   end
 
   @impl true
   def handle_event("command", %{"cmd" => cmd}, socket) do
     case Command.parse(cmd) do
-      :not_command -> select(String.trim(cmd), socket)
-      {:navigate, path} -> {:noreply, push_navigate(socket, to: path)}
-      {:message, msg} -> {:noreply, assign(socket, message: msg)}
-      :toggle_debug -> {:noreply, assign(socket, message: "Le mode debug est sur l'écran d'action.")}
-      :noop -> {:noreply, socket}
+      :not_command ->
+        select(String.trim(cmd), socket)
+
+      {:navigate, path} ->
+        {:noreply, push_navigate(socket, to: path)}
+
+      {:message, msg} ->
+        {:noreply, assign(socket, message: msg)}
+
+      :toggle_debug ->
+        {:noreply, assign(socket, message: "Le mode debug est sur l'écran d'action.")}
+
+      :noop ->
+        {:noreply, socket}
     end
   end
 
@@ -81,7 +91,8 @@ defmodule BuisWeb.CliLive.Menu do
        when type in [:update, :destroy] do
     {:noreply,
      assign(socket,
-       message: "« #{action_name} » (#{type}) s'exécute sur un enregistrement : ouvrez une liste (option Read)."
+       message:
+         "« #{action_name} » (#{type}) s'exécute sur un enregistrement : ouvrez une liste (option Read)."
      )}
   end
 
@@ -165,7 +176,9 @@ defmodule BuisWeb.CliLive.Menu do
           <input type="text" name="cmd" value="" id="cmd" phx-mounted={JS.focus()} />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Valider &nbsp;·&nbsp; <b>Échap</b>/<b>0</b>=Retour &nbsp;·&nbsp; commandes <b>:</b> (ex. <b>:list account</b>, <b>:help</b>)
+          <b>Entrée</b>=Valider &nbsp;·&nbsp; <b>Échap</b>/<b>0</b>=Retour &nbsp;·&nbsp; commandes
+          <b>:</b>
+          (ex. <b>:list account</b>, <b>:help</b>)
         </div>
       </div>
     </div>

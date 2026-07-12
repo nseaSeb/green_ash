@@ -68,14 +68,29 @@ defmodule BuisWeb.CliLive.Field do
   @doc "Décide le `type=` du widget HTML pour un type Ash donné."
   def input_type(type, constraints) do
     cond do
-      enum_values(type, constraints) != nil -> "select"
-      type in [Ash.Type.String, Ash.Type.CiString] -> "text"
-      type == Ash.Type.Integer -> "number"
-      type in [Ash.Type.Decimal, Ash.Type.Float] -> "number"
-      type == Ash.Type.Boolean -> "checkbox"
-      type == Ash.Type.Date -> "date"
-      type in [Ash.Type.UtcDatetime, Ash.Type.UtcDatetimeUsec, Ash.Type.NaiveDatetime] -> "datetime-local"
-      true -> fallback(type)
+      enum_values(type, constraints) != nil ->
+        "select"
+
+      type in [Ash.Type.String, Ash.Type.CiString] ->
+        "text"
+
+      type == Ash.Type.Integer ->
+        "number"
+
+      type in [Ash.Type.Decimal, Ash.Type.Float] ->
+        "number"
+
+      type == Ash.Type.Boolean ->
+        "checkbox"
+
+      type == Ash.Type.Date ->
+        "date"
+
+      type in [Ash.Type.UtcDatetime, Ash.Type.UtcDatetimeUsec, Ash.Type.NaiveDatetime] ->
+        "datetime-local"
+
+      true ->
+        fallback(type)
     end
   end
 

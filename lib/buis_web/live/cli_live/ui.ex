@@ -59,6 +59,8 @@ defmodule BuisWeb.CliLive.UI do
       .crt table.sf tr.exp td { background:#042808; }
       .crt-legend { color:#9dffb8; }
       .crt-legend b { color:#33ff5e; }
+      .crt-confirm { border:1px solid #ff6b6b; padding:.6rem .8rem; margin-bottom:1rem; display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+      .crt-confirm p { margin:0; flex:1; }
     </style>
     """
   end

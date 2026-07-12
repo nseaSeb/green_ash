@@ -34,8 +34,7 @@ defmodule BuisWeb.CliLive.Screen do
            message: "",
            return_to: return_to(resource)
          )
-         |> assign(form: fresh_form(subject, action)),
-         layout: false}
+         |> assign(form: fresh_form(subject, action)), layout: false}
     end
   end
 
@@ -79,11 +78,20 @@ defmodule BuisWeb.CliLive.Screen do
 
   def handle_event("command", %{"cmd" => cmd}, socket) do
     case Command.parse(cmd) do
-      {:navigate, path} -> {:noreply, push_navigate(socket, to: path)}
-      {:message, msg} -> {:noreply, assign(socket, message: msg)}
-      :toggle_debug -> {:noreply, assign(socket, debug: !socket.assigns.debug)}
-      :noop -> {:noreply, socket}
-      :not_command -> {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
+      {:navigate, path} ->
+        {:noreply, push_navigate(socket, to: path)}
+
+      {:message, msg} ->
+        {:noreply, assign(socket, message: msg)}
+
+      :toggle_debug ->
+        {:noreply, assign(socket, debug: !socket.assigns.debug)}
+
+      :noop ->
+        {:noreply, socket}
+
+      :not_command ->
+        {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
     end
   end
 
@@ -159,7 +167,8 @@ defmodule BuisWeb.CliLive.Screen do
           <input type="text" name="cmd" value="" id="cmd" />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Exécuter &nbsp;·&nbsp; <b>Échap</b>=Retour au menu &nbsp;·&nbsp; <b>:debug</b> <b>:menu</b> <b>:help</b>
+          <b>Entrée</b>=Exécuter &nbsp;·&nbsp; <b>Échap</b>=Retour au menu &nbsp;·&nbsp; <b>:debug</b>
+          <b>:menu</b> <b>:help</b>
         </div>
       </div>
     </div>

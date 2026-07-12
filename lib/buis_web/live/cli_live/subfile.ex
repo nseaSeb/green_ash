@@ -33,6 +33,7 @@ defmodule BuisWeb.CliLive.Subfile do
            codes: build_codes(resource),
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
            expanded: MapSet.new(),
+           confirm: [],
            message: ""
          )
          |> load_rows(), layout: false}
@@ -79,13 +80,40 @@ defmodule BuisWeb.CliLive.Subfile do
 
   def handle_event("process", _params, socket), do: {:noreply, socket}
 
+  def handle_event("destroy-confirm", _params, socket) do
+    Enum.each(socket.assigns.confirm, fn {id, action} ->
+      socket.assigns.resource |> Ash.get!(id) |> Ash.destroy!(action: action)
+    end)
+
+    {:noreply,
+     socket
+     |> assign(
+       confirm: [],
+       message: "#{length(socket.assigns.confirm)} suppression(s) effectuée(s)."
+     )
+     |> load_rows()}
+  end
+
+  def handle_event("destroy-cancel", _params, socket),
+    do: {:noreply, assign(socket, confirm: [], message: "Suppression annulée.")}
+
   def handle_event("command", %{"cmd" => cmd}, socket) do
     case Command.parse(cmd) do
-      {:navigate, path} -> {:noreply, push_navigate(socket, to: path)}
-      {:message, msg} -> {:noreply, assign(socket, message: msg)}
-      :toggle_debug -> {:noreply, assign(socket, message: "Utilisez l'option 5 pour afficher un enregistrement.")}
-      :noop -> {:noreply, socket}
-      :not_command -> {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
+      {:navigate, path} ->
+        {:noreply, push_navigate(socket, to: path)}
+
+      {:message, msg} ->
+        {:noreply, assign(socket, message: msg)}
+
+      :toggle_debug ->
+        {:noreply,
+         assign(socket, message: "Utilisez l'option 5 pour afficher un enregistrement.")}
+
+      :noop ->
+        {:noreply, socket}
+
+      :not_command ->
+        {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
     end
   end
 
@@ -111,21 +139,23 @@ defmodule BuisWeb.CliLive.Subfile do
         _ -> nil
       end)
 
-    Enum.each(destroys, fn {id, action} ->
-      socket.assigns.resource |> Ash.get!(id) |> Ash.destroy!(action: action)
-    end)
+    cond do
+      # Les suppressions passent par un écran de confirmation (façon AS400).
+      destroys != [] ->
+        {:noreply, assign(socket, confirm: destroys, message: "Confirmez la suppression.")}
 
-    case update do
-      {id, action} ->
+      update ->
+        {id, action} = update
+
         {:noreply,
          push_navigate(socket,
            to: ~p"/cli/r/#{Registry.resource_slug(socket.assigns.resource)}/a/#{action}/#{id}"
          )}
 
-      nil ->
+      true ->
         {:noreply,
          socket
-         |> assign(expanded: MapSet.new(displays), message: message(destroys, displays, unknown))
+         |> assign(expanded: MapSet.new(displays), message: message([], displays, unknown))
          |> load_rows()}
     end
   end
@@ -157,9 +187,16 @@ defmodule BuisWeb.CliLive.Subfile do
       <div class="crt-rule"></div>
 
       <div class="crt-body">
+        <div :if={@confirm != []} class="crt-confirm">
+          <p class="crt-err">
+            ⚠ Confirmer la suppression de {length(@confirm)} enregistrement(s) ?
+          </p>
+          <button phx-click="destroy-confirm" class="btn">Confirmer</button>
+          <button type="button" phx-click="destroy-cancel" class="crt-linkbtn">Annuler</button>
+        </div>
+
         <p class="crt-legend">
-          Opt :
-          <span :for={c <- @codes}><b>{c.code}</b>={c.label} &nbsp;</span>
+          Opt : <span :for={c <- @codes}><b>{c.code}</b>={c.label} &nbsp;</span>
         </p>
 
         <form phx-submit="process">
@@ -201,7 +238,8 @@ defmodule BuisWeb.CliLive.Subfile do
           <input type="text" name="cmd" value="" id="cmd" />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Valider les options &nbsp;·&nbsp; <b>Échap</b>=Retour au menu &nbsp;·&nbsp; <b>:menu</b> <b>:help</b>
+          <b>Entrée</b>=Valider les options &nbsp;·&nbsp; <b>Échap</b>=Retour au menu &nbsp;·&nbsp;
+          <b>:menu</b> <b>:help</b>
         </div>
       </div>
     </div>

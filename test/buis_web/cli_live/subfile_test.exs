@@ -44,14 +44,34 @@ defmodule BuisWeb.CliLive.SubfileTest do
     assert Decimal.equal?(updated.balance, Decimal.new("150"))
   end
 
-  test "l'option 4 (destroy) supprime l'enregistrement", %{conn: conn} do
+  test "l'option 4 (destroy) demande confirmation puis supprime", %{conn: conn} do
+    acc = open_account("Alice", "100")
+
+    {:ok, view, _html} = live(conn, @list)
+
+    html =
+      view
+      |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}})
+      |> render_submit()
+
+    # Étape de confirmation : rien n'est encore supprimé.
+    assert html =~ "Confirmer la suppression"
+    assert {:ok, _} = Ash.get(Account, acc.id)
+
+    view |> element("button", "Confirmer") |> render_click()
+
+    assert match?({:error, _}, Ash.get(Account, acc.id))
+  end
+
+  test "annuler la confirmation ne supprime pas", %{conn: conn} do
     acc = open_account("Alice", "100")
 
     {:ok, view, _html} = live(conn, @list)
 
     view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}}) |> render_submit()
+    view |> element("button", "Annuler") |> render_click()
 
-    assert match?({:error, _}, Ash.get(Account, acc.id))
+    assert {:ok, _} = Ash.get(Account, acc.id)
   end
 
   test "l'option 5 (afficher) déplie le détail de l'enregistrement", %{conn: conn} do
@@ -60,7 +80,8 @@ defmodule BuisWeb.CliLive.SubfileTest do
 
     {:ok, view, _html} = live(conn, @list)
 
-    html = view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "5"}}) |> render_submit()
+    html =
+      view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "5"}}) |> render_submit()
 
     assert html =~ "affichage"
     # Le détail inspecté contient le module de la resource.
