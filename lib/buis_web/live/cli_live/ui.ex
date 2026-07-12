@@ -55,6 +55,8 @@ defmodule BuisWeb.CliLive.UI do
       .crt table.sf { border-collapse:collapse; width:100%; margin-top:.4rem; }
       .crt table.sf th, .crt table.sf td { text-align:left; padding:.12rem .7rem .12rem 0; border-bottom:1px dotted #0c5a1f; white-space:nowrap; }
       .crt table.sf th { color:#7dffa0; text-transform:uppercase; font-size:.72em; letter-spacing:.06em; }
+      .crt table.sf th.sf-th { cursor:pointer; user-select:none; }
+      .crt table.sf th.sf-th:hover { color:#33ff5e; }
       .crt .sf-opt { width:3ch; background:#000; color:#33ff5e; border:1px solid #1f7a34; text-align:center; font:inherit; padding:.1rem; }
       .crt table.sf tr.exp td { background:#042808; }
       .crt-legend { color:#9dffb8; }

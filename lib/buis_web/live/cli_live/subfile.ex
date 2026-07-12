@@ -36,6 +36,7 @@ defmodule BuisWeb.CliLive.Subfile do
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
            arg_specs: Field.specs(resource, action),
            args: %{},
+           sort: nil,
            page: 0,
            has_next: false,
            expanded: MapSet.new(),
@@ -56,18 +57,23 @@ defmodule BuisWeb.CliLive.Subfile do
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
 
   defp load_rows(socket) do
-    %{resource: resource, action: action, args: args, actor: actor, page: page} = socket.assigns
+    %{resource: resource, action: action, args: args, actor: actor, page: page, sort: sort} =
+      socket.assigns
 
     # On demande une ligne de plus que la page pour détecter s'il en reste.
     fetched =
       resource
       |> Ash.Query.for_read(action.name, args, actor: actor)
+      |> maybe_sort(sort)
       |> Ash.Query.limit(@per_page + 1)
       |> Ash.Query.offset(page * @per_page)
       |> Ash.read!(actor: actor)
 
     assign(socket, rows: Enum.take(fetched, @per_page), has_next: length(fetched) > @per_page)
   end
+
+  defp maybe_sort(query, nil), do: query
+  defp maybe_sort(query, {field, dir}), do: Ash.Query.sort(query, [{field, dir}])
 
   # Codes d'option applicables à une ligne, dérivés des actions de la resource.
   defp build_codes(resource) do
@@ -104,6 +110,13 @@ defmodule BuisWeb.CliLive.Subfile do
 
   def handle_event("page", %{"dir" => "prev"}, socket) do
     {:noreply, socket |> update(:page, &max(&1 - 1, 0)) |> load_rows()}
+  end
+
+  def handle_event("sort", %{"col" => col}, socket) do
+    field = String.to_existing_atom(col)
+    # Cycle : asc -> desc -> aucun tri.
+    {:noreply,
+     socket |> assign(sort: next_sort(socket.assigns.sort, field), page: 0) |> load_rows()}
   end
 
   def handle_event("process", %{"opt" => opts}, socket) do
@@ -261,7 +274,9 @@ defmodule BuisWeb.CliLive.Subfile do
             <thead>
               <tr>
                 <th>Opt</th>
-                <th :for={col <- @columns}>{Phoenix.Naming.humanize(col)}</th>
+                <th :for={col <- @columns} phx-click="sort" phx-value-col={col} class="sf-th">
+                  {Phoenix.Naming.humanize(col)}{sort_indicator(@sort, col)}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -329,6 +344,14 @@ defmodule BuisWeb.CliLive.Subfile do
     </div>
     """
   end
+
+  defp next_sort({field, :asc}, field), do: {field, :desc}
+  defp next_sort({field, :desc}, field), do: nil
+  defp next_sort(_other, field), do: {field, :asc}
+
+  defp sort_indicator({field, :asc}, field), do: " ▲"
+  defp sort_indicator({field, :desc}, field), do: " ▼"
+  defp sort_indicator(_sort, _col), do: ""
 
   defp expanded?(set, row, pk), do: MapSet.member?(set, to_string(Map.get(row, pk)))
 

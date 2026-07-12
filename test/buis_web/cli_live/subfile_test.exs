@@ -137,6 +137,24 @@ defmodule BuisWeb.CliLive.SubfileTest do
     assert page1 =~ "Page 1"
   end
 
+  test "tri par colonne (Holder) : asc puis desc", %{conn: conn} do
+    open_account("Charlie", "1")
+    open_account("Alice", "1")
+    open_account("Bob", "1")
+
+    {:ok, view, _html} = live(conn, @list)
+
+    asc = view |> element("th", "Holder") |> render_click()
+    assert pos(asc, "Alice") < pos(asc, "Bob")
+    assert pos(asc, "Bob") < pos(asc, "Charlie")
+
+    desc = view |> element("th", "Holder") |> render_click()
+    assert pos(desc, "Charlie") < pos(desc, "Alice")
+  end
+
   # Nombre de lignes de données = nombre de champs "Opt" rendus.
   defp row_count(html), do: length(String.split(html, ~s(name="opt[))) - 1
+
+  # Position (octet) de la 1re occurrence d'une chaîne dans le html.
+  defp pos(html, s), do: html |> String.split(s) |> hd() |> byte_size()
 end
