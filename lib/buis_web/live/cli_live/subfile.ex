@@ -30,6 +30,7 @@ defmodule BuisWeb.CliLive.Subfile do
          |> assign(
            resource: resource,
            action: action,
+           pk: primary_key_field(resource),
            codes: build_codes(resource),
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
            expanded: MapSet.new(),
@@ -40,11 +41,17 @@ defmodule BuisWeb.CliLive.Subfile do
     end
   end
 
+  # Champ de clé primaire (on gère la PK simple ; sinon le 1er champ).
+  defp primary_key_field(resource) do
+    resource |> Ash.Resource.Info.primary_key() |> List.first()
+  end
+
   defp load_rows(socket) do
     rows =
       socket.assigns.resource
-      |> Ash.read!(action: socket.assigns.action.name)
-      |> Enum.take(@limit)
+      |> Ash.Query.for_read(socket.assigns.action.name)
+      |> Ash.Query.limit(@limit)
+      |> Ash.read!()
 
     assign(socket, rows: rows)
   end
@@ -81,16 +88,17 @@ defmodule BuisWeb.CliLive.Subfile do
   def handle_event("process", _params, socket), do: {:noreply, socket}
 
   def handle_event("destroy-confirm", _params, socket) do
-    Enum.each(socket.assigns.confirm, fn {id, action} ->
-      socket.assigns.resource |> Ash.get!(id) |> Ash.destroy!(action: action)
-    end)
+    done =
+      Enum.count(socket.assigns.confirm, fn {id, action} ->
+        case Ash.get(socket.assigns.resource, id) do
+          {:ok, record} -> match?(:ok, Ash.destroy(record, action: action))
+          _ -> false
+        end
+      end)
 
     {:noreply,
      socket
-     |> assign(
-       confirm: [],
-       message: "#{length(socket.assigns.confirm)} suppression(s) effectuée(s)."
-     )
+     |> assign(confirm: [], message: "#{done} suppression(s) effectuée(s).")
      |> load_rows()}
   end
 
@@ -178,7 +186,7 @@ defmodule BuisWeb.CliLive.Subfile do
   def render(assigns) do
     ~H"""
     <UI.styles />
-    <div class="crt" phx-window-keydown="keydown">
+    <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
       <div class="crt-head">
         <span>BUIS / {String.upcase(Registry.resource_label(@resource))}</span>
         <span class="crt-title">LISTE · {Registry.resource_title(@resource)}</span>
@@ -209,13 +217,18 @@ defmodule BuisWeb.CliLive.Subfile do
             </thead>
             <tbody>
               <%= for row <- @rows do %>
-                <tr class={expanded?(@expanded, row) && "exp"}>
+                <tr class={expanded?(@expanded, row, @pk) && "exp"}>
                   <td>
-                    <input class="sf-opt" name={"opt[#{row.id}]"} maxlength="2" autocomplete="off" />
+                    <input
+                      class="sf-opt"
+                      name={"opt[#{Map.get(row, @pk)}]"}
+                      maxlength="2"
+                      autocomplete="off"
+                    />
                   </td>
                   <td :for={col <- @columns}>{cell(row, col)}</td>
                 </tr>
-                <tr :if={expanded?(@expanded, row)} class="exp">
+                <tr :if={expanded?(@expanded, row, @pk)} class="exp">
                   <td></td>
                   <td colspan={length(@columns)}>
                     <pre class="crt-pre">{inspect(row, pretty: true, limit: :infinity)}</pre>
@@ -246,10 +259,13 @@ defmodule BuisWeb.CliLive.Subfile do
     """
   end
 
-  defp expanded?(set, row), do: MapSet.member?(set, row.id)
+  defp expanded?(set, row, pk), do: MapSet.member?(set, to_string(Map.get(row, pk)))
 
-  defp cell(row, :id), do: String.slice(to_string(row.id), 0, 8) <> "…"
-  defp cell(row, col), do: fmt(Map.get(row, col))
+  defp cell(row, col), do: row |> Map.get(col) |> fmt() |> truncate()
+
+  # Tronque les longues valeurs (ex. UUID) pour garder l'alignement colonne.
+  defp truncate(s) when byte_size(s) > 12, do: String.slice(s, 0, 11) <> "…"
+  defp truncate(s), do: s
 
   defp fmt(nil), do: ""
   defp fmt(%Decimal{} = d), do: Decimal.to_string(d)

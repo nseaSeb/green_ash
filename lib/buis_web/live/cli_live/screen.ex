@@ -19,27 +19,38 @@ defmodule BuisWeb.CliLive.Screen do
 
       resource ->
         action = Registry.action(resource, params["action"])
-        # subject = la resource (create) ou un enregistrement chargé (update/destroy).
-        subject = subject(resource, params["id"])
 
-        {:ok,
-         socket
-         |> assign(
-           resource: resource,
-           action: action,
-           subject: subject,
-           specs: Field.specs(resource, action),
-           result: nil,
-           debug: false,
-           message: "",
-           return_to: return_to(resource)
-         )
-         |> assign(form: fresh_form(subject, action)), layout: false}
+        # subject = la resource (create) ou un enregistrement chargé (update/destroy).
+        case load_subject(resource, params["id"]) do
+          {:ok, subject} ->
+            {:ok,
+             socket
+             |> assign(
+               resource: resource,
+               action: action,
+               subject: subject,
+               specs: Field.specs(resource, action),
+               result: nil,
+               debug: false,
+               message: "",
+               return_to: return_to(resource)
+             )
+             |> assign(form: fresh_form(subject, action)), layout: false}
+
+          :error ->
+            {:ok, push_navigate(socket, to: return_to(resource))}
+        end
     end
   end
 
-  defp subject(resource, nil), do: resource
-  defp subject(resource, id), do: Ash.get!(resource, id)
+  defp load_subject(resource, nil), do: {:ok, resource}
+
+  defp load_subject(resource, id) do
+    case Ash.get(resource, id) do
+      {:ok, record} -> {:ok, record}
+      _ -> :error
+    end
+  end
 
   # Après un update/destroy on revient à la liste (read primaire) si elle existe.
   defp return_to(resource) do
@@ -115,7 +126,7 @@ defmodule BuisWeb.CliLive.Screen do
   def render(assigns) do
     ~H"""
     <UI.styles />
-    <div class="crt" phx-window-keydown="keydown">
+    <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
       <div class="crt-head">
         <span>BUIS / {String.upcase(short(@resource))}</span>
         <span class="crt-title">{Registry.action_label(@action)}</span>

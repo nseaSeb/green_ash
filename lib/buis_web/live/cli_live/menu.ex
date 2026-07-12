@@ -143,7 +143,7 @@ defmodule BuisWeb.CliLive.Menu do
   def render(assigns) do
     ~H"""
     <UI.styles />
-    <div class="crt" phx-window-keydown="keydown">
+    <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
       <div class="crt-head">
         <span>BUIS / {program(assigns)}</span>
         <span class="crt-title">{title(assigns)}</span>
