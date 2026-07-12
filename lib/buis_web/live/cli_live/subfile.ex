@@ -2,22 +2,22 @@ defmodule BuisWeb.CliLive.Subfile do
   @moduledoc """
   Subfile AS400 : liste des enregistrements retournés par une action `:read`,
   avec une colonne "Opt" par ligne. Les codes d'option (2/3/6…=actions update,
-  4=destroy, 5=afficher) sont dérivés par introspection des actions de la
-  resource — aucune connaissance spécifique n'est codée ici.
+  4=destroy, 5=afficher) et les colonnes sont dérivés par introspection —
+  aucune connaissance spécifique n'est codée ici.
 
-  Saisir un code puis Entrée exécute l'action sur la ligne : les destroy/afficher
-  s'appliquent en place, une action update (qui demande des arguments) ouvre
-  l'écran de saisie (`BuisWeb.CliLive.Screen`) pour l'enregistrement choisi.
+  Si la read action a des arguments, ils sont rendus comme une barre de filtre
+  (côté requête, sur toute la table). Toutes les lectures/suppressions passent
+  l'acteur courant (`BuisWeb.Cli.Actor`) pour éprouver les policies Ash.
   """
   use BuisWeb, :live_view
 
-  alias BuisWeb.Cli.Registry
-  alias BuisWeb.CliLive.{Command, UI}
+  alias BuisWeb.Cli.{Actor, Registry}
+  alias BuisWeb.CliLive.{Command, Field, UI}
 
   @limit 200
 
   @impl true
-  def mount(%{"resource" => slug, "action" => action_name}, _session, socket) do
+  def mount(%{"resource" => slug, "action" => action_name}, session, socket) do
     case Registry.resource_by_slug(slug) do
       nil ->
         {:ok, push_navigate(socket, to: ~p"/cli")}
@@ -30,28 +30,37 @@ defmodule BuisWeb.CliLive.Subfile do
          |> assign(
            resource: resource,
            action: action,
+           actor: Actor.from_session(session),
            pk: primary_key_field(resource),
            codes: build_codes(resource),
            columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
+           arg_specs: Field.specs(resource, action),
+           args: %{},
            expanded: MapSet.new(),
            confirm: [],
            message: ""
          )
+         |> assign_filter_form()
          |> load_rows(), layout: false}
     end
   end
 
-  # Champ de clé primaire (on gère la PK simple ; sinon le 1er champ).
+  # Champ de clé primaire (PK simple ; sinon le 1er champ).
   defp primary_key_field(resource) do
     resource |> Ash.Resource.Info.primary_key() |> List.first()
   end
 
+  defp assign_filter_form(socket),
+    do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
+
   defp load_rows(socket) do
+    %{resource: resource, action: action, args: args, actor: actor} = socket.assigns
+
     rows =
-      socket.assigns.resource
-      |> Ash.Query.for_read(socket.assigns.action.name)
+      resource
+      |> Ash.Query.for_read(action.name, args, actor: actor)
       |> Ash.Query.limit(@limit)
-      |> Ash.read!()
+      |> Ash.read!(actor: actor)
 
     assign(socket, rows: rows)
   end
@@ -78,6 +87,10 @@ defmodule BuisWeb.CliLive.Subfile do
   end
 
   @impl true
+  def handle_event("filter", %{"filter" => params}, socket) do
+    {:noreply, socket |> assign(args: params) |> assign_filter_form() |> load_rows()}
+  end
+
   def handle_event("process", %{"opt" => opts}, socket) do
     entries =
       for {id, code} <- opts, trimmed = String.trim(code), trimmed != "", do: {id, trimmed}
@@ -88,17 +101,22 @@ defmodule BuisWeb.CliLive.Subfile do
   def handle_event("process", _params, socket), do: {:noreply, socket}
 
   def handle_event("destroy-confirm", _params, socket) do
-    done =
-      Enum.count(socket.assigns.confirm, fn {id, action} ->
-        case Ash.get(socket.assigns.resource, id) do
-          {:ok, record} -> match?(:ok, Ash.destroy(record, action: action))
-          _ -> false
+    actor = socket.assigns.actor
+
+    results =
+      Enum.map(socket.assigns.confirm, fn {id, action} ->
+        with {:ok, record} <- Ash.get(socket.assigns.resource, id, actor: actor),
+             :ok <- Ash.destroy(record, action: action, actor: actor) do
+          :ok
+        else
+          {:error, %Ash.Error.Forbidden{}} -> :forbidden
+          _ -> :error
         end
       end)
 
     {:noreply,
      socket
-     |> assign(confirm: [], message: "#{done} suppression(s) effectuée(s).")
+     |> assign(confirm: [], message: destroy_message(results))
      |> load_rows()}
   end
 
@@ -106,23 +124,11 @@ defmodule BuisWeb.CliLive.Subfile do
     do: {:noreply, assign(socket, confirm: [], message: "Suppression annulée.")}
 
   def handle_event("command", %{"cmd" => cmd}, socket) do
-    case Command.parse(cmd) do
-      {:navigate, path} ->
-        {:noreply, push_navigate(socket, to: path)}
-
-      {:message, msg} ->
-        {:noreply, assign(socket, message: msg)}
-
-      :toggle_debug ->
-        {:noreply,
-         assign(socket, message: "Utilisez l'option 5 pour afficher un enregistrement.")}
-
-      :noop ->
-        {:noreply, socket}
-
-      :not_command ->
-        {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
-    end
+    Command.apply_to(socket, cmd,
+      on_debug: fn s ->
+        {:noreply, assign(s, message: "Utilisez l'option 5 pour afficher un enregistrement.")}
+      end
+    )
   end
 
   def handle_event("keydown", %{"key" => "Escape"}, socket),
@@ -168,6 +174,22 @@ defmodule BuisWeb.CliLive.Subfile do
     end
   end
 
+  defp destroy_message(results) do
+    done = Enum.count(results, &(&1 == :ok))
+    forbidden? = Enum.any?(results, &(&1 == :forbidden))
+
+    cond do
+      forbidden? and done == 0 ->
+        "Interdit : suppression réservée à un acteur (:actor <resource> <id>)."
+
+      forbidden? ->
+        "#{done} suppression(s) ; d'autres interdites (acteur requis)."
+
+      true ->
+        "#{done} suppression(s) effectuée(s)."
+    end
+  end
+
   defp message(destroys, displays, unknown) do
     []
     |> add(destroys != [], "#{length(destroys)} suppression(s)")
@@ -190,7 +212,7 @@ defmodule BuisWeb.CliLive.Subfile do
       <div class="crt-head">
         <span>BUIS / {String.upcase(Registry.resource_label(@resource))}</span>
         <span class="crt-title">LISTE · {Registry.resource_title(@resource)}</span>
-        <span>{today()}</span>
+        <span>◆ {Actor.label(@actor)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 
@@ -202,6 +224,18 @@ defmodule BuisWeb.CliLive.Subfile do
           <button phx-click="destroy-confirm" class="btn">Confirmer</button>
           <button type="button" phx-click="destroy-cancel" class="crt-linkbtn">Annuler</button>
         </div>
+
+        <form :if={@arg_specs != []} phx-change="filter" phx-submit="filter" class="crt-filter">
+          <.input
+            :for={spec <- @arg_specs}
+            field={@filter_form[spec.name]}
+            type={spec.input_type}
+            label={"Filtre — " <> spec.label}
+            options={spec.options || []}
+            prompt="—"
+            {spec.rest}
+          />
+        </form>
 
         <p class="crt-legend">
           Opt : <span :for={c <- @codes}><b>{c.code}</b>={c.label} &nbsp;</span>
@@ -252,7 +286,7 @@ defmodule BuisWeb.CliLive.Subfile do
         </form>
         <div class="crt-keys">
           <b>Entrée</b>=Valider les options &nbsp;·&nbsp; <b>Échap</b>=Retour au menu &nbsp;·&nbsp;
-          <b>:menu</b> <b>:help</b>
+          <b>:actor &lt;r&gt; &lt;id&gt;</b> <b>:whoami</b> <b>:help</b>
         </div>
       </div>
     </div>

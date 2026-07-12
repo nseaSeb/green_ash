@@ -12,7 +12,16 @@ defmodule BuisWeb.CliLive.CommandTest do
       assert Command.parse(":list account") == {:navigate, "/cli/r/account/list/read"}
       assert Command.parse(":new account") == {:navigate, "/cli/r/account/a/open"}
       assert Command.parse(":debug") == :toggle_debug
+      assert Command.parse(":whoami") == :whoami
       assert {:message, _} = Command.parse(":help")
+    end
+
+    test "acteur -> redirection contrôleur" do
+      assert {:redirect, "/cli/actor?slug=account&id=42&return=%2Fcli"} =
+               Command.parse(":actor account 42")
+
+      assert {:redirect, "/cli/actor?return=%2Fcli"} = Command.parse(":actor none")
+      assert {:message, _} = Command.parse(":actor")
     end
 
     test "entrées invalides" do

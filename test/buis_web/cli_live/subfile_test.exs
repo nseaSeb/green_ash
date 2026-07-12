@@ -11,6 +11,10 @@ defmodule BuisWeb.CliLive.SubfileTest do
     |> Ash.create!()
   end
 
+  defp with_actor(conn, %Account{id: id}) do
+    Plug.Test.init_test_session(conn, %{"cli_actor" => %{"slug" => "account", "id" => id}})
+  end
+
   @list "/cli/r/account/list/read"
 
   test "le subfile liste les enregistrements de la read action", %{conn: conn} do
@@ -22,7 +26,6 @@ defmodule BuisWeb.CliLive.SubfileTest do
     assert html =~ "LISTE"
     assert html =~ "Alice"
     assert html =~ "Bob"
-    # La légende des codes est dérivée par introspection.
     assert html =~ "Créditer"
     assert html =~ "Supprimer"
   end
@@ -40,43 +43,56 @@ defmodule BuisWeb.CliLive.SubfileTest do
 
     screen |> form("form[phx-submit='submit']", form: %{"amount" => "50"}) |> render_submit()
 
-    updated = Ash.get!(Account, acc.id)
+    updated = Ash.get!(Account, acc.id, authorize?: false)
     assert Decimal.equal?(updated.balance, Decimal.new("150"))
   end
 
-  test "l'option 4 (destroy) demande confirmation puis supprime", %{conn: conn} do
+  test "l'option 4 avec acteur : confirmation puis suppression", %{conn: conn} do
+    actor = open_account("Chef", "0")
     acc = open_account("Alice", "100")
 
-    {:ok, view, _html} = live(conn, @list)
+    {:ok, view, _html} = live(with_actor(conn, actor), @list)
 
     html =
       view
       |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}})
       |> render_submit()
 
-    # Étape de confirmation : rien n'est encore supprimé.
     assert html =~ "Confirmer la suppression"
-    assert {:ok, _} = Ash.get(Account, acc.id)
+    assert {:ok, _} = Ash.get(Account, acc.id, authorize?: false)
 
     view |> element("button", "Confirmer") |> render_click()
 
-    assert match?({:error, _}, Ash.get(Account, acc.id))
+    assert match?({:error, _}, Ash.get(Account, acc.id, authorize?: false))
   end
 
-  test "annuler la confirmation ne supprime pas", %{conn: conn} do
+  test "l'option 4 sans acteur est refusée par la policy", %{conn: conn} do
     acc = open_account("Alice", "100")
 
     {:ok, view, _html} = live(conn, @list)
 
     view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}}) |> render_submit()
+    html = view |> element("button", "Confirmer") |> render_click()
+
+    assert html =~ "Interdit"
+    assert {:ok, _} = Ash.get(Account, acc.id, authorize?: false)
+  end
+
+  test "annuler la confirmation ne supprime pas", %{conn: conn} do
+    actor = open_account("Chef", "0")
+    acc = open_account("Alice", "100")
+
+    {:ok, view, _html} = live(with_actor(conn, actor), @list)
+
+    view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}}) |> render_submit()
     view |> element("button", "Annuler") |> render_click()
 
-    assert {:ok, _} = Ash.get(Account, acc.id)
+    assert {:ok, _} = Ash.get(Account, acc.id, authorize?: false)
   end
 
   test "l'option 5 (afficher) déplie le détail de l'enregistrement", %{conn: conn} do
     open_account("Alice", "100")
-    [acc] = Ash.read!(Account)
+    [acc] = Ash.read!(Account, authorize?: false)
 
     {:ok, view, _html} = live(conn, @list)
 
@@ -84,7 +100,24 @@ defmodule BuisWeb.CliLive.SubfileTest do
       view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "5"}}) |> render_submit()
 
     assert html =~ "affichage"
-    # Le détail inspecté contient le module de la resource.
     assert html =~ "Buis.Bank.Account"
+  end
+
+  test "la barre de filtre (read :search) filtre côté requête", %{conn: conn} do
+    open_account("Alice", "1")
+    open_account("Bob", "1")
+
+    {:ok, view, html} = live(conn, "/cli/r/account/list/search")
+    assert html =~ "Alice"
+    assert html =~ "Bob"
+    assert html =~ "Filtre"
+
+    filtered =
+      view
+      |> form("form.crt-filter", %{"filter" => %{"holder" => "Ali"}})
+      |> render_change()
+
+    assert filtered =~ "Alice"
+    refute filtered =~ "Bob"
   end
 end

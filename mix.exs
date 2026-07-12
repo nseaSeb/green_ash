@@ -70,7 +70,8 @@ defmodule Buis.MixProject do
       {:ash, "~> 3.0"},
       {:ash_phoenix, "~> 2.0"},
       {:ash_postgres, "~> 2.0"},
-      {:ash_admin, ">= 0.0.0", only: :dev}
+      {:ash_admin, ">= 0.0.0", only: :dev},
+      {:picosat_elixir, "~> 0.2"}
     ]
   end
 

@@ -15,35 +15,25 @@ defmodule BuisWeb.CliLive.Menu do
   """
   use BuisWeb, :live_view
 
-  alias BuisWeb.Cli.Registry
+  alias BuisWeb.Cli.{Actor, Registry}
   alias BuisWeb.CliLive.{Command, UI}
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     {:ok,
      socket
-     |> assign(level: :main, resource: nil, message: "")
+     |> assign(level: :main, resource: nil, message: "", actor: Actor.from_session(session))
      |> assign_options(), layout: false}
   end
 
   @impl true
   def handle_event("command", %{"cmd" => cmd}, socket) do
-    case Command.parse(cmd) do
-      :not_command ->
-        select(String.trim(cmd), socket)
-
-      {:navigate, path} ->
-        {:noreply, push_navigate(socket, to: path)}
-
-      {:message, msg} ->
-        {:noreply, assign(socket, message: msg)}
-
-      :toggle_debug ->
-        {:noreply, assign(socket, message: "Le mode debug est sur l'écran d'action.")}
-
-      :noop ->
-        {:noreply, socket}
-    end
+    Command.apply_to(socket, cmd,
+      on_other: fn input, s -> select(String.trim(input), s) end,
+      on_debug: fn s ->
+        {:noreply, assign(s, message: "Le mode debug est sur l'écran d'action.")}
+      end
+    )
   end
 
   def handle_event("select", %{"n" => n}, socket), do: select(n, socket)
@@ -147,7 +137,7 @@ defmodule BuisWeb.CliLive.Menu do
       <div class="crt-head">
         <span>BUIS / {program(assigns)}</span>
         <span class="crt-title">{title(assigns)}</span>
-        <span>{today()}</span>
+        <span>◆ {Actor.label(@actor)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 

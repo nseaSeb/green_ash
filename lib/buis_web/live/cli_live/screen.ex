@@ -8,11 +8,13 @@ defmodule BuisWeb.CliLive.Screen do
   """
   use BuisWeb, :live_view
 
-  alias BuisWeb.Cli.Registry
+  alias BuisWeb.Cli.{Actor, Registry}
   alias BuisWeb.CliLive.{Command, Field, UI}
 
   @impl true
-  def mount(%{"resource" => slug} = params, _session, socket) do
+  def mount(%{"resource" => slug} = params, session, socket) do
+    actor = Actor.from_session(session)
+
     case Registry.resource_by_slug(slug) do
       nil ->
         {:ok, push_navigate(socket, to: ~p"/cli")}
@@ -21,7 +23,7 @@ defmodule BuisWeb.CliLive.Screen do
         action = Registry.action(resource, params["action"])
 
         # subject = la resource (create) ou un enregistrement chargé (update/destroy).
-        case load_subject(resource, params["id"]) do
+        case load_subject(resource, params["id"], actor) do
           {:ok, subject} ->
             {:ok,
              socket
@@ -29,13 +31,14 @@ defmodule BuisWeb.CliLive.Screen do
                resource: resource,
                action: action,
                subject: subject,
+               actor: actor,
                specs: Field.specs(resource, action),
                result: nil,
                debug: false,
                message: "",
                return_to: return_to(resource)
              )
-             |> assign(form: fresh_form(subject, action)), layout: false}
+             |> assign(form: fresh_form(subject, action, actor)), layout: false}
 
           :error ->
             {:ok, push_navigate(socket, to: return_to(resource))}
@@ -43,10 +46,10 @@ defmodule BuisWeb.CliLive.Screen do
     end
   end
 
-  defp load_subject(resource, nil), do: {:ok, resource}
+  defp load_subject(resource, nil, _actor), do: {:ok, resource}
 
-  defp load_subject(resource, id) do
-    case Ash.get(resource, id) do
+  defp load_subject(resource, id, actor) do
+    case Ash.get(resource, id, actor: actor) do
       {:ok, record} -> {:ok, record}
       _ -> :error
     end
@@ -74,7 +77,9 @@ defmodule BuisWeb.CliLive.Screen do
           {:noreply,
            socket
            |> assign(result: {:ok, result})
-           |> assign(form: fresh_form(socket.assigns.subject, socket.assigns.action))}
+           |> assign(
+             form: fresh_form(socket.assigns.subject, socket.assigns.action, socket.assigns.actor)
+           )}
         else
           {:noreply, push_navigate(socket, to: socket.assigns.return_to)}
         end
@@ -88,22 +93,9 @@ defmodule BuisWeb.CliLive.Screen do
     do: {:noreply, assign(socket, debug: !socket.assigns.debug)}
 
   def handle_event("command", %{"cmd" => cmd}, socket) do
-    case Command.parse(cmd) do
-      {:navigate, path} ->
-        {:noreply, push_navigate(socket, to: path)}
-
-      {:message, msg} ->
-        {:noreply, assign(socket, message: msg)}
-
-      :toggle_debug ->
-        {:noreply, assign(socket, debug: !socket.assigns.debug)}
-
-      :noop ->
-        {:noreply, socket}
-
-      :not_command ->
-        {:noreply, assign(socket, message: "Utilisez « : » pour une commande. #{Command.help()}")}
-    end
+    Command.apply_to(socket, cmd,
+      on_debug: fn s -> {:noreply, assign(s, debug: !s.assigns.debug)} end
+    )
   end
 
   def handle_event("keydown", %{"key" => "Escape"}, socket),
@@ -111,8 +103,8 @@ defmodule BuisWeb.CliLive.Screen do
 
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
 
-  defp fresh_form(resource, action) do
-    resource |> AshPhoenix.Form.for_action(action.name) |> to_form()
+  defp fresh_form(subject, action, actor) do
+    subject |> AshPhoenix.Form.for_action(action.name, actor: actor) |> to_form()
   end
 
   # AshPhoenix.Form peut être encapsulé par to_form/1 ; on récupère la source.
@@ -130,7 +122,7 @@ defmodule BuisWeb.CliLive.Screen do
       <div class="crt-head">
         <span>BUIS / {String.upcase(short(@resource))}</span>
         <span class="crt-title">{Registry.action_label(@action)}</span>
-        <span>{@action.name} · {@action.type}</span>
+        <span>◆ {Actor.label(@actor)} · {@action.name} · {@action.type}</span>
       </div>
       <div class="crt-rule"></div>
 

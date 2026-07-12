@@ -49,6 +49,7 @@ defmodule BuisWeb.Router do
       live "/r/:resource/list/:action", CliLive.Subfile
       live "/r/:resource/a/:action", CliLive.Screen
       live "/r/:resource/a/:action/:id", CliLive.Screen
+      get "/actor", CliActorController, :set
     end
   end
 end

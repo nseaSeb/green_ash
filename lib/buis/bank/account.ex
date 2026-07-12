@@ -6,7 +6,8 @@ defmodule Buis.Bank.Account do
   """
   use Ash.Resource,
     domain: Buis.Bank,
-    data_layer: AshPostgres.DataLayer
+    data_layer: AshPostgres.DataLayer,
+    authorizers: [Ash.Policy.Authorizer]
 
   resource do
     description "Comptes bancaires"
@@ -15,6 +16,18 @@ defmodule Buis.Bank.Account do
   postgres do
     table "accounts"
     repo Buis.Repo
+  end
+
+  # Démonstration des policies : supprimer un compte exige un acteur ;
+  # le reste est autorisé. La console passe l'acteur choisi via `:actor`.
+  policies do
+    policy action_type(:destroy) do
+      authorize_if actor_present()
+    end
+
+    policy always() do
+      authorize_if always()
+    end
   end
 
   attributes do
@@ -48,6 +61,13 @@ defmodule Buis.Bank.Account do
 
   actions do
     defaults [:read, :destroy]
+
+    # Read avec argument : démontre le filtre de liste côté requête.
+    read :search do
+      description "Rechercher par titulaire"
+      argument :holder, :string, allow_nil?: true
+      filter expr(is_nil(^arg(:holder)) or contains(holder, ^arg(:holder)))
+    end
 
     # Action métier : ouvrir un compte avec un dépôt initial (argument).
     create :open do
