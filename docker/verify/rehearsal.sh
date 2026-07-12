@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # Rejoue le parcours d'un utilisateur qui n'a JAMAIS entendu parler de
-# green_ash : bootstrap Phoenix vierge, installeurs Ash officiels, puis
-# green_ash (depuis Git avec `sparse:`, tant que le paquet n'est pas encore
-# sur Hex — voir la note au point 3b sur pourquoi ce détour est nécessaire
-# seulement en pré-publication).
+# green_ash : bootstrap Phoenix vierge, puis LA VRAIE commande finale
+# (green_ash est publié sur Hex depuis la v0.1.0 — plus besoin du
+# contournement Git+sparse utilisé en pré-publication).
 #
 # set -x : trace chaque commande, pour voir précisément où ça diverge si
 # une des hypothèses (nom de fichier généré par un installeur, etc.) est fausse.
 set -euxo pipefail
 
-GREEN_ASH_REF="${GREEN_ASH_REF:-main}"
 PGHOST="${PGHOST:-postgres}"
 
 cd /work
@@ -21,24 +19,8 @@ cd demo
 echo "### 2. Pointer la config DB sur le service Postgres du compose"
 sed -i "s/hostname: \"localhost\"/hostname: \"${PGHOST}\"/" config/dev.exs config/test.exs
 
-echo "### 3a. Ash + Phoenix + Postgres (installeurs officiels, séparément de green_ash)"
-mix igniter.install ash,ash_phoenix,ash_postgres --yes
-
-echo "### 3b. green_ash depuis GitHub"
-echo "###     NOTE : le monorepo héberge la lib dans un sous-dossier. La forme"
-echo "###     courte 'package@github:owner/repo' de igniter.install ne permet"
-echo "###     PAS de préciser un sous-répertoire (option git 'sparse'). Ce n'est"
-echo "###     PAS un problème pour un vrai utilisateur post-publication Hex (le"
-echo "###     tarball Hex contient directement le contenu de green_ash/, sans la"
-echo "###     racine du monorepo) — mais pour tester le code réel avant publication,"
-echo "###     on ajoute la dep git avec 'sparse:' explicitement, comme le ferait"
-echo "###     quelqu'un qui veut dépendre du repo Git plutôt que de Hex."
-# Insère la dep git juste après l'ouverture de `defp deps do\n    [`
-# (structure générée par phx.new, stable dans ce contexte contrôlé).
-sed -i "/defp deps do/{n;s/\[/[\n      {:green_ash, git: \"https:\/\/github.com\/nseaSeb\/green_ash.git\", ref: \"${GREEN_ASH_REF}\", sparse: \"green_ash\"},/}" mix.exs
-cat mix.exs
-mix deps.get
-mix green_ash.install --yes
+echo "### 3. LA VRAIE COMMANDE : ash + green_ash en une fois, depuis Hex"
+mix igniter.install ash,ash_phoenix,ash_postgres,green_ash --yes
 
 echo "### État après l'installeur (pour diagnostic) ---"
 echo "--- mix.exs ---"; cat mix.exs

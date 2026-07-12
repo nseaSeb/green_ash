@@ -19,4 +19,3 @@ services:
         condition: service_healthy
     environment:
       PGHOST: postgres
-      GREEN_ASH_REF: "${GREEN_ASH_REF:-main}"
