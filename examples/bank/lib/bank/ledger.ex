@@ -1,6 +1,6 @@
 defmodule Bank.Ledger do
   @moduledoc """
-  Domaine métier "cobaye" servant de banc de test au renderer CLI.
+  "Guinea pig" business domain serving as a test bench for the CLI renderer.
   """
   use Ash.Domain
 

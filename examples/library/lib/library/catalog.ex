@@ -1,8 +1,8 @@
 defmodule Library.Catalog do
   @moduledoc """
-  Domaine de démonstration GreenAsh : une relation Author <-> Book, pour
-  éprouver le rendu d'une clé étrangère et servir de répétition générale à
-  `mix green_ash.install` sur une app qui n'a jamais connu la lib.
+  GreenAsh demo domain: an Author <-> Book relationship, to test the
+  rendering of a foreign key and serve as a dress rehearsal for
+  `mix green_ash.install` on an app that has never known the lib.
   """
   use Ash.Domain
 

@@ -4,7 +4,7 @@ defmodule GreenAsh.FieldTest do
   alias GreenAsh.Field
   alias GreenAsh.TestSupport.Account
 
-  test "specs déduites de l'action open" do
+  test "specs inferred from the open action" do
     action = Ash.Resource.Info.action(Account, :open)
     specs = Field.specs(Account, action)
 
@@ -14,7 +14,7 @@ defmodule GreenAsh.FieldTest do
     assert by[:initial_deposit] == "number"
   end
 
-  test "mapping type Ash -> widget, avec fallback" do
+  test "Ash type -> widget mapping, with fallback" do
     assert Field.input_type(Ash.Type.String, []) == "text"
     assert Field.input_type(Ash.Type.Integer, []) == "number"
     assert Field.input_type(Ash.Type.Boolean, []) == "checkbox"
@@ -23,7 +23,7 @@ defmodule GreenAsh.FieldTest do
     assert Field.input_type(Ash.Type.Map, []) == "textarea"
   end
 
-  test "UUID/UUIDv7 (clés étrangères de belongs_to) se rendent en texte, pas en fallback" do
+  test "UUID/UUIDv7 (belongs_to foreign keys) render as text, not fallback" do
     assert Field.input_type(Ash.Type.UUID, []) == "text"
     assert Field.input_type(Ash.Type.UUIDv7, []) == "text"
   end

@@ -70,11 +70,11 @@ defmodule Library.MixProject do
       {:ash_phoenix, "~> 2.0"},
       {:ash_postgres, "~> 2.0"},
       {:picosat_elixir, "~> 0.2"},
-      # Ajoutée automatiquement par `mix igniter.install green_ash` chez un
-      # vrai consommateur (Mix ne propage pas les deps only:dev/test d'une
-      # lib vers ses consommateurs) — conservée pour rester fidèle à cet état.
+      # Automatically added by `mix igniter.install green_ash` on a real
+      # consumer (Mix does not propagate a lib's only:dev/test deps to its
+      # consumers) — kept to stay faithful to that state.
       {:igniter, "~> 0.5", only: [:dev, :test]},
-      # La console de test — dépendance Hex réelle, publiée (v0.1.0+).
+      # The test console — a real, published Hex dependency (v0.1.0+).
       {:green_ash, "~> 0.1"}
     ]
   end

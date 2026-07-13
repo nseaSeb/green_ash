@@ -1,9 +1,9 @@
 defmodule GreenAsh.Live.Screen do
   @moduledoc """
-  Moteur générique : rend un écran de saisie exécutable pour UNE action Ash,
-  entièrement par introspection. La resource/action viennent de la route ; les
-  champs sont déduits par `GreenAsh.Field` et le formulaire par `AshPhoenix.Form`.
-  Un `:id` (token de PK) charge un enregistrement pour une action update.
+  Generic engine: renders an executable entry screen for ONE Ash action,
+  entirely through introspection. The resource/action come from the route;
+  the fields are inferred by `GreenAsh.Field` and the form by
+  `AshPhoenix.Form`. An `:id` (PK token) loads a record for an update action.
   """
   use GreenAsh.Web, :live_view
 
@@ -97,7 +97,7 @@ defmodule GreenAsh.Live.Screen do
 
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
 
-  # subject = la resource (create) ou l'enregistrement chargé (update/destroy).
+  # subject = the resource (create) or the loaded record (update/destroy).
   defp fresh_form(subject, action, actor) do
     subject |> AshPhoenix.Form.for_action(action.name, actor: actor) |> to_form()
   end
@@ -121,7 +121,7 @@ defmodule GreenAsh.Live.Screen do
       <div class="crt-rule"></div>
 
       <div class="crt-body">
-        <p class="crt-lead">Renseignez les champs, puis Entrée pour exécuter.</p>
+        <p class="crt-lead">Fill in the fields, then press Enter to execute.</p>
 
         <.form for={@form} phx-change="validate" phx-submit="submit">
           <.input
@@ -135,7 +135,7 @@ defmodule GreenAsh.Live.Screen do
           />
 
           <div class="crt-cmd" style="margin-top:1rem">
-            <.button type="submit">Exécuter ⏎</.button>
+            <.button type="submit">Execute ⏎</.button>
             <button type="button" phx-click="toggle-debug" class="crt-linkbtn">
               debug: {if @debug, do: "on", else: "off"}
             </button>
@@ -145,10 +145,10 @@ defmodule GreenAsh.Live.Screen do
         <div :if={@result} style="margin-top:1.2rem">
           <%= case @result do %>
             <% {:ok, record} -> %>
-              <div class="crt-ok">✔ OK — {short(@resource)} · {@action.name} exécuté.</div>
+              <div class="crt-ok">✔ OK — {short(@resource)} · {@action.name} executed.</div>
               <pre :if={@debug} class="crt-pre">{inspect(record, pretty: true, limit: :infinity)}</pre>
             <% :error -> %>
-              <div class="crt-err">✘ Échec — voir les erreurs sur les champs.</div>
+              <div class="crt-err">✘ Failed — see the field errors.</div>
               <pre :if={@debug} class="crt-pre">{inspect(AshPhoenix.Form.errors(ash_form(@form)), pretty: true)}</pre>
           <% end %>
         </div>
@@ -160,11 +160,11 @@ defmodule GreenAsh.Live.Screen do
         <div class="crt-rule"></div>
         <div class="crt-msg">{@message}</div>
         <form phx-submit="command" class="crt-cmd" autocomplete="off">
-          <label>Commande ===></label>
+          <label>Command ===></label>
           <input type="text" name="cmd" value="" id="cmd" />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Exécuter &nbsp;·&nbsp; <b>Échap</b>=Retour &nbsp;·&nbsp; <b>:debug</b>
+          <b>Enter</b>=Execute &nbsp;·&nbsp; <b>Esc</b>=Back &nbsp;·&nbsp; <b>:debug</b>
           <b>:menu</b> <b>:help</b>
         </div>
       </div>

@@ -1,8 +1,8 @@
 defmodule BankWeb.ConsoleTest do
   @moduledoc """
-  Tests d'intégration de la console GreenAsh montée via `green_ash "/cli"` :
-  ils valident le câblage lib <-> hôte (macro de routeur, on_mount, session
-  d'acteur, policies) de bout en bout. La logique pure est testée dans la lib.
+  Integration tests for the GreenAsh console mounted via `green_ash "/cli"`:
+  they validate the lib <-> host wiring (router macro, on_mount, actor
+  session, policies) end to end. The pure logic is tested in the lib.
   """
   use BankWeb.ConnCase
 
@@ -20,30 +20,30 @@ defmodule BankWeb.ConsoleTest do
     Plug.Test.init_test_session(conn, %{"green_ash_actor" => %{"slug" => "account", "id" => id}})
   end
 
-  test "le menu découvre la resource exposée", %{conn: conn} do
+  test "the menu discovers the exposed resource", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/cli")
-    assert html =~ "MENU PRINCIPAL"
-    assert html =~ "Comptes bancaires"
+    assert html =~ "MAIN MENU"
+    assert html =~ "Bank accounts"
   end
 
-  test "les domaines sont lus dynamiquement (config :bank, :ash_domains), pas figés au routeur",
+  test "domains are read dynamically (config :bank, :ash_domains), not pinned to the router",
        %{conn: conn} do
-    # Régression : un domaine ajouté APRÈS `mix green_ash.install` (ou retiré
-    # de la config) doit se refléter immédiatement, sans toucher au routeur.
+    # Regression: a domain added AFTER `mix green_ash.install` (or removed
+    # from the config) must be reflected immediately, without touching the router.
     original = Application.get_env(:bank, :ash_domains)
     on_exit(fn -> Application.put_env(:bank, :ash_domains, original) end)
 
     Application.put_env(:bank, :ash_domains, [])
     {:ok, _view, html} = live(conn, "/cli")
-    refute html =~ "Comptes bancaires"
-    assert html =~ "aucune resource exposée"
+    refute html =~ "Bank accounts"
+    assert html =~ "no resource exposed"
 
     Application.put_env(:bank, :ash_domains, original)
     {:ok, _view2, html2} = live(conn, "/cli")
-    assert html2 =~ "Comptes bancaires"
+    assert html2 =~ "Bank accounts"
   end
 
-  test "création via l'écran générique", %{conn: conn} do
+  test "creation via the generic screen", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/cli/r/account/a/open")
 
     view
@@ -53,7 +53,7 @@ defmodule BankWeb.ConsoleTest do
     assert Enum.any?(Ash.read!(Account, authorize?: false), &(&1.holder == "Bob"))
   end
 
-  test "commande :list navigue vers la liste", %{conn: conn} do
+  test ":list command navigates to the list", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/cli")
 
     {:ok, _v, html} =
@@ -62,26 +62,26 @@ defmodule BankWeb.ConsoleTest do
       |> render_submit()
       |> follow_redirect(conn)
 
-    assert html =~ "LISTE · Comptes bancaires"
+    assert html =~ "LIST · Bank accounts"
   end
 
-  test "suppression : interdite sans acteur, autorisée avec (policy + session)", %{conn: conn} do
+  test "deletion: forbidden without an actor, allowed with one (policy + session)", %{conn: conn} do
     acc = open_account("Alice", "10")
 
     {:ok, view, _html} = live(conn, "/cli/r/account/list/read")
     view |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}}) |> render_submit()
-    html = view |> element("button", "Confirmer") |> render_click()
-    assert html =~ "Interdit"
+    html = view |> element("button", "Confirm") |> render_click()
+    assert html =~ "Forbidden"
     assert {:ok, _} = Ash.get(Account, acc.id, authorize?: false)
 
     actor = open_account("Chef", "0")
     {:ok, view2, _html} = live(with_actor(conn, actor), "/cli/r/account/list/read")
     view2 |> form("form[phx-submit='process']", %{"opt" => %{acc.id => "4"}}) |> render_submit()
-    view2 |> element("button", "Confirmer") |> render_click()
+    view2 |> element("button", "Confirm") |> render_click()
     assert match?({:error, _}, Ash.get(Account, acc.id, authorize?: false))
   end
 
-  test "acteur défini via le contrôleur, reflété dans l'en-tête", %{conn: conn} do
+  test "actor set via the controller, reflected in the header", %{conn: conn} do
     acc = open_account("Chef", "0")
 
     conn = get(conn, "/cli/actor?slug=account&id=#{acc.id}&return=/cli")
@@ -91,7 +91,7 @@ defmodule BankWeb.ConsoleTest do
     assert html =~ "Account:"
   end
 
-  test "relation belongs_to : le menu liste Transaction, account_id se rend en texte, création OK",
+  test "belongs_to relationship: menu lists Transaction, account_id renders as text, creation OK",
        %{conn: conn} do
     {:ok, _view, menu_html} = live(conn, "/cli")
     assert menu_html =~ "Transactions"
@@ -99,7 +99,7 @@ defmodule BankWeb.ConsoleTest do
     acc = open_account("Alice", "100")
 
     {:ok, view, html} = live(conn, "/cli/r/transaction/a/create")
-    # Ash.Type.UUID doit se rendre en champ texte, pas en fallback textarea/JSON.
+    # Ash.Type.UUID must render as a text field, not fall back to textarea/JSON.
     assert html =~ ~s(type="text" id="form_account_id" name="form[account_id]")
 
     view

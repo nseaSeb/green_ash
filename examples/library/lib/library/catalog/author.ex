@@ -7,7 +7,7 @@ defmodule Library.Catalog.Author do
     data_layer: AshPostgres.DataLayer
 
   resource do
-    description("Auteurs")
+    description("Authors")
   end
 
   postgres do

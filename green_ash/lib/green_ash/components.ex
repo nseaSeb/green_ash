@@ -1,12 +1,12 @@
 defmodule GreenAsh.Components do
   @moduledoc """
-  Composants d'UI auto-contenus de la console : la feuille de style « terminal
-  vert » plein écran, un `<.input>` générique (piloté par un champ de formulaire
-  AshPhoenix) et un `<.button>`. Aucune dépendance aux composants de l'hôte.
+  Self-contained UI components for the console: the full-screen "green
+  terminal" stylesheet, a generic `<.input>` (driven by an AshPhoenix form
+  field), and a `<.button>`. No dependency on the host's components.
   """
   use Phoenix.Component
 
-  @doc "Feuille de style du terminal (à inclure une fois par écran)."
+  @doc "Terminal stylesheet (to include once per screen)."
   def styles(assigns) do
     ~H"""
     <style>
@@ -69,7 +69,7 @@ defmodule GreenAsh.Components do
     """
   end
 
-  @doc "Bouton stylé « terminal »."
+  @doc "\"Terminal\"-styled button."
   attr :type, :string, default: "text"
   slot :inner_block, required: true
   attr :rest, :global, include: ~w(disabled)
@@ -81,9 +81,9 @@ defmodule GreenAsh.Components do
   end
 
   @doc """
-  Champ de formulaire générique, piloté par un `Phoenix.HTML.FormField` — le
-  `type` (déduit par `GreenAsh.Field`) sélectionne le widget rendu (texte,
-  nombre, date, checkbox, select, textarea).
+  Generic form field, driven by a `Phoenix.HTML.FormField` — the `type`
+  (inferred by `GreenAsh.Field`) selects the rendered widget (text, number,
+  date, checkbox, select, textarea).
   """
   attr :field, Phoenix.HTML.FormField, required: true
   attr :type, :string, default: "text"
@@ -167,7 +167,7 @@ defmodule GreenAsh.Components do
     """
   end
 
-  # Interpolation minimale des messages d'erreur Ash/Ecto (sans gettext).
+  # Minimal interpolation of Ash/Ecto error messages (without gettext).
   defp translate(msg, opts) do
     Enum.reduce(opts, msg, fn {key, value}, acc ->
       String.replace(acc, "%{#{key}}", fn _ -> to_string(value) end)

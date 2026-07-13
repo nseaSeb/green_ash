@@ -14,13 +14,13 @@ defmodule GreenAsh.TestSupport.Account do
     data_layer: Ash.DataLayer.Ets,
     authorizers: [Ash.Policy.Authorizer]
 
-  # Table ETS privée au process : isolation automatique entre tests async.
+  # Process-private ETS table: automatic isolation between async tests.
   ets do
     private? true
   end
 
   resource do
-    description "Comptes bancaires"
+    description "Bank accounts"
   end
 
   attributes do
@@ -55,7 +55,7 @@ defmodule GreenAsh.TestSupport.Account do
     end
 
     create :open do
-      description "Ouvrir un compte"
+      description "Open an account"
       primary? true
       accept [:holder, :opened_on]
       argument :initial_deposit, :decimal, allow_nil?: false, default: Decimal.new(0)
@@ -70,7 +70,7 @@ defmodule GreenAsh.TestSupport.Account do
     end
 
     update :credit do
-      description "Créditer un compte"
+      description "Credit an account"
       accept []
       require_atomic? false
       argument :amount, :decimal, allow_nil?: false

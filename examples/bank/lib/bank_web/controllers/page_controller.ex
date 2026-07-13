@@ -2,7 +2,7 @@ defmodule BankWeb.PageController do
   use BankWeb, :controller
 
   def home(conn, _params) do
-    # En dev, la racine mène directement à la console CLI.
+    # In dev, the root leads directly to the CLI console.
     if Application.get_env(:bank, :dev_routes) do
       redirect(conn, to: "/cli")
     else

@@ -7,7 +7,7 @@ defmodule GreenAsh.CommandTest do
   @domains [Bank]
   @base "/cli"
 
-  test "navigation construite depuis la base de montage" do
+  test "navigation built from the mount base" do
     assert Command.parse(":menu", @base, @domains) == {:navigate, "/cli"}
 
     assert Command.parse(":list account", @base, @domains) ==
@@ -18,14 +18,14 @@ defmodule GreenAsh.CommandTest do
     assert Command.parse(":whoami", @base, @domains) == :whoami
   end
 
-  test "acteur -> redirection contrôleur avec return encodé" do
+  test "actor -> controller redirect with encoded return" do
     assert {:redirect, "/cli/actor?slug=account&id=42&return=%2Fcli"} =
              Command.parse(":actor account 42", @base, @domains)
 
     assert {:redirect, "/cli/actor?return=%2Fcli"} = Command.parse(":actor none", @base, @domains)
   end
 
-  test "entrées invalides" do
+  test "invalid inputs" do
     assert {:message, _} = Command.parse(":list inconnu", @base, @domains)
     assert {:message, _} = Command.parse(":wat", @base, @domains)
     assert Command.parse("3", @base, @domains) == :not_command

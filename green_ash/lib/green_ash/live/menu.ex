@@ -1,9 +1,9 @@
 defmodule GreenAsh.Live.Menu do
   @moduledoc """
-  Menu principal, façon AS400 : plein écran, options numérotées, ligne de
-  commande `Option ===>` et navigation clavier. Deux niveaux découverts
-  automatiquement (resources -> actions). Une action `:create` ouvre l'écran de
-  saisie, `:read` une liste ; `:update`/`:destroy` renvoient vers une liste.
+  Main menu, AS400-style: full screen, numbered options, `Option ===>`
+  command line, and keyboard navigation. Two levels discovered automatically
+  (resources -> actions). A `:create` action opens the entry screen, `:read`
+  opens a list; `:update`/`:destroy` redirect to a list.
   """
   use GreenAsh.Web, :live_view
 
@@ -17,7 +17,7 @@ defmodule GreenAsh.Live.Menu do
     Command.apply_to(socket, cmd,
       on_other: fn input, s -> select(String.trim(input), s) end,
       on_debug: fn s ->
-        {:noreply, assign(s, message: "Le mode debug est sur l'écran d'action.")}
+        {:noreply, assign(s, message: "Debug mode is on the action screen.")}
       end
     )
   end
@@ -33,11 +33,11 @@ defmodule GreenAsh.Live.Menu do
   defp select(input, socket) do
     case Integer.parse(input) do
       {n, ""} -> dispatch(Enum.find(socket.assigns.options, &(&1.n == n)), socket)
-      _ -> {:noreply, assign(socket, message: "Commande non reconnue : #{input}")}
+      _ -> {:noreply, assign(socket, message: "Command not recognized: #{input}")}
     end
   end
 
-  defp dispatch(nil, socket), do: {:noreply, assign(socket, message: "Option invalide.")}
+  defp dispatch(nil, socket), do: {:noreply, assign(socket, message: "Invalid option.")}
 
   defp dispatch(%{target: {:resource, resource}}, socket) do
     {:noreply,
@@ -62,8 +62,7 @@ defmodule GreenAsh.Live.Menu do
        when type in [:update, :destroy] do
     {:noreply,
      assign(socket,
-       message:
-         "« #{name} » (#{type}) s'exécute sur un enregistrement : ouvrez une liste (option Read)."
+       message: "\"#{name}\" (#{type}) runs on a record: open a list (Read option)."
      )}
   end
 
@@ -120,7 +119,7 @@ defmodule GreenAsh.Live.Menu do
       <div class="crt-rule"></div>
 
       <div class="crt-body">
-        <p class="crt-lead">Sélectionnez une option, puis appuyez sur Entrée.</p>
+        <p class="crt-lead">Select an option, then press Enter.</p>
 
         <div :for={opt <- @options} class="crt-opt" phx-click="select" phx-value-n={opt.n}>
           <span class="crt-num">{opt.n}.</span>
@@ -128,7 +127,7 @@ defmodule GreenAsh.Live.Menu do
           <span :if={opt.detail} class="crt-detail">{opt.detail}</span>
         </div>
 
-        <p :if={@options == []} class="crt-detail">(aucune resource exposée)</p>
+        <p :if={@options == []} class="crt-detail">(no resource exposed)</p>
       </div>
 
       <div class="crt-foot">
@@ -139,9 +138,8 @@ defmodule GreenAsh.Live.Menu do
           <input type="text" name="cmd" value="" id="cmd" phx-mounted={JS.focus()} />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Valider &nbsp;·&nbsp; <b>Échap</b>/<b>0</b>=Retour &nbsp;·&nbsp; commandes
-          <b>:</b>
-          (ex. <b>:list account</b>, <b>:help</b>)
+          <b>Enter</b>=Confirm &nbsp;·&nbsp; <b>Esc</b>/<b>0</b>=Back &nbsp;·&nbsp; commands <b>:</b>
+          (e.g. <b>:list account</b>, <b>:help</b>)
         </div>
       </div>
     </div>
@@ -151,7 +149,7 @@ defmodule GreenAsh.Live.Menu do
   defp program(%{level: :main}), do: "MAIN"
   defp program(%{resource: resource}), do: String.upcase(Registry.resource_label(resource))
 
-  defp title(%{level: :main}), do: "MENU PRINCIPAL"
+  defp title(%{level: :main}), do: "MAIN MENU"
   defp title(%{resource: resource}), do: "MENU · " <> Registry.resource_label(resource)
 
   defp today, do: Calendar.strftime(Date.utc_today(), "%d/%m/%y")

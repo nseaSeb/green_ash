@@ -1,8 +1,8 @@
 defmodule Bank.Ledger.Account do
   @moduledoc """
-  Resource cobaye : couvre plusieurs types scalaires (string, decimal, enum, date)
-  et des actions variées (create/read/destroy + actions métier avec arguments)
-  pour exercer le mapper type -> widget du renderer CLI.
+  Guinea pig resource: covers several scalar types (string, decimal, enum,
+  date) and various actions (create/read/destroy + business actions with
+  arguments) to exercise the CLI renderer's type -> widget mapper.
   """
   use Ash.Resource,
     domain: Bank.Ledger,
@@ -10,7 +10,7 @@ defmodule Bank.Ledger.Account do
     authorizers: [Ash.Policy.Authorizer]
 
   resource do
-    description "Comptes bancaires"
+    description "Bank accounts"
   end
 
   postgres do
@@ -18,8 +18,8 @@ defmodule Bank.Ledger.Account do
     repo Bank.Repo
   end
 
-  # Démonstration des policies : supprimer un compte exige un acteur ;
-  # le reste est autorisé. La console passe l'acteur choisi via `:actor`.
+  # Policy demonstration: deleting an account requires an actor; everything
+  # else is authorized. The console passes the chosen actor via `:actor`.
   policies do
     policy action_type(:destroy) do
       authorize_if actor_present()
@@ -62,16 +62,16 @@ defmodule Bank.Ledger.Account do
   actions do
     defaults [:read, :destroy]
 
-    # Read avec argument : démontre le filtre de liste côté requête.
+    # Read with argument: demonstrates the query-side list filter.
     read :search do
-      description "Rechercher par titulaire"
+      description "Search by holder"
       argument :holder, :string, allow_nil?: true
       filter expr(is_nil(^arg(:holder)) or contains(holder, ^arg(:holder)))
     end
 
-    # Action métier : ouvrir un compte avec un dépôt initial (argument).
+    # Business action: open an account with an initial deposit (argument).
     create :open do
-      description "Ouvrir un compte"
+      description "Open an account"
       primary? true
       accept [:holder, :opened_on]
 
@@ -86,9 +86,9 @@ defmodule Bank.Ledger.Account do
       end
     end
 
-    # Action métier : créditer un compte existant (update + argument).
+    # Business action: credit an existing account (update + argument).
     update :credit do
-      description "Créditer un compte"
+      description "Credit an account"
       accept []
       require_atomic? false
 
@@ -97,8 +97,8 @@ defmodule Bank.Ledger.Account do
       end
 
       change fn changeset, _context ->
-        # `amount` est nil pendant la construction du formulaire (avant saisie) :
-        # on n'applique le calcul que lorsqu'il est présent.
+        # `amount` is nil while the form is being built (before input): the
+        # calculation is only applied once it is present.
         case Ash.Changeset.get_argument(changeset, :amount) do
           nil ->
             changeset

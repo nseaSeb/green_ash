@@ -1,7 +1,8 @@
 defmodule Bank.Ledger.Transaction do
   @moduledoc """
-  Resource cobaye : exerce une relation (`belongs_to`) pour éprouver le rendu
-  d'une clé étrangère (Ash.Type.UUID) et le tri/filtre sur des données liées.
+  Guinea pig resource: exercises a relationship (`belongs_to`) to test the
+  rendering of a foreign key (Ash.Type.UUID) and sorting/filtering on related
+  data.
   """
   use Ash.Resource,
     domain: Bank.Ledger,

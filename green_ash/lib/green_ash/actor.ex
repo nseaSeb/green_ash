@@ -1,9 +1,9 @@
 defmodule GreenAsh.Actor do
   @moduledoc """
-  Gestion de l'« acteur » de la console : l'enregistrement Ash au nom duquel les
-  actions sont exécutées (pour éprouver les policies). Stocké en session HTTP
-  (une LiveView ne peut pas écrire la session via le socket : cf.
-  `GreenAsh.ActorController`) et rethreadé dans tous les appels Ash.
+  Management of the console's "actor": the Ash record on whose behalf actions
+  are executed (to exercise the policies). Stored in the HTTP session (a
+  LiveView cannot write the session via the socket: see
+  `GreenAsh.ActorController`) and re-threaded through all Ash calls.
   """
   alias GreenAsh.Registry
 
@@ -11,7 +11,7 @@ defmodule GreenAsh.Actor do
 
   def session_key, do: @session_key
 
-  @doc "Résout l'acteur depuis la session (parmi `domains`), ou nil."
+  @doc "Resolves the actor from the session (among `domains`), or nil."
   def from_session(session, domains) do
     case session do
       %{@session_key => %{"slug" => slug, "id" => id}} ->
@@ -27,8 +27,8 @@ defmodule GreenAsh.Actor do
     end
   end
 
-  @doc "Libellé court de l'acteur pour l'en-tête (ex. \"Account:1b78…\")."
-  def label(nil), do: "anonyme"
+  @doc "Short label of the actor for the header (e.g. \"Account:1b78…\")."
+  def label(nil), do: "anonymous"
 
   def label(%resource{} = record) do
     pk = resource |> Ash.Resource.Info.primary_key() |> List.first()

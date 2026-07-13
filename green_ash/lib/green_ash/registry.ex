@@ -1,55 +1,55 @@
 defmodule GreenAsh.Registry do
   @moduledoc """
-  Découverte, au runtime, des resources / actions Ash à partir de la liste de
-  domaines fournie par l'hôte (via la macro de routeur), et résolution
-  module <-> slug / clé primaire pour les routes de la console.
+  Runtime discovery of Ash resources / actions from the list of domains
+  provided by the host (via the router macro), and module <-> slug / primary
+  key resolution for the console's routes.
 
-  Aucune resource n'est référencée en dur : tout vient des domaines passés en
-  argument et de l'introspection Ash.
+  No resource is hardcoded: everything comes from the domains passed as an
+  argument and from Ash introspection.
   """
 
-  @doc "Toutes les resources exposées par `domains`."
+  @doc "All resources exposed by `domains`."
   def resources(domains) do
     domains
     |> Enum.flat_map(&Ash.Domain.Info.resources/1)
     |> Enum.uniq()
   end
 
-  @doc "Actions d'une resource."
+  @doc "Actions of a resource."
   def actions(resource), do: Ash.Resource.Info.actions(resource)
 
-  @doc "Libellé court d'une resource (dernier segment du module)."
+  @doc "Short label of a resource (last segment of the module)."
   def resource_label(resource), do: resource |> Module.split() |> List.last()
 
-  @doc "Description humaine d'une resource, si définie, sinon son libellé."
+  @doc "Human description of a resource, if defined, otherwise its label."
   def resource_title(resource) do
     Ash.Resource.Info.description(resource) || resource_label(resource)
   end
 
-  @doc "Slug URL d'une resource (ex: MyApp.Bank.Account -> \"account\")."
+  @doc "URL slug of a resource (e.g.: MyApp.Bank.Account -> \"account\")."
   def resource_slug(resource), do: resource |> resource_label() |> Macro.underscore()
 
-  @doc "Resource correspondant à un slug parmi `domains`, ou nil."
+  @doc "Resource matching a slug among `domains`, or nil."
   def resource_by_slug(domains, slug),
     do: Enum.find(resources(domains), &(resource_slug(&1) == slug))
 
-  @doc "Struct d'action par nom (string ou atom)."
+  @doc "Action struct by name (string or atom)."
   def action(resource, name) when is_binary(name),
     do: action(resource, String.to_existing_atom(name))
 
   def action(resource, name) when is_atom(name),
     do: Ash.Resource.Info.action(resource, name)
 
-  @doc "Libellé d'une action : sa description si définie, sinon son nom humanisé."
+  @doc "Label of an action: its description if defined, otherwise its humanized name."
   def action_label(action) do
     action.description || Phoenix.Naming.humanize(action.name)
   end
 
   @doc """
-  Encode la clé primaire d'un enregistrement en un token pour URL/formulaire.
+  Encodes a record's primary key into a token for URL/form use.
 
-  PK simple -> la valeur brute (rétrocompatible). PK composite -> un token
-  base64url d'un JSON `{champ => valeur}`.
+  Simple PK -> the raw value (backward-compatible). Composite PK -> a
+  base64url token of a JSON `{field => value}`.
   """
   def encode_pk(%resource{} = record) do
     case Ash.Resource.Info.primary_key(resource) do
@@ -64,7 +64,7 @@ defmodule GreenAsh.Registry do
     end
   end
 
-  @doc "Décode un token de clé primaire en identifiant utilisable par `Ash.get/2`."
+  @doc "Decodes a primary key token into an identifier usable by `Ash.get/2`."
   def decode_pk(resource, token) do
     case Ash.Resource.Info.primary_key(resource) do
       [_single] ->

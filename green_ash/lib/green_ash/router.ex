@@ -1,9 +1,9 @@
 defmodule GreenAsh.Router do
   @moduledoc """
-  Intégration au routeur de l'hôte.
+  Integration into the host's router.
 
-  À placer dans une `scope` passant par un pipeline avec session (`fetch_session`),
-  typiquement `:browser` :
+  Place it in a `scope` going through a pipeline with a session
+  (`fetch_session`), typically `:browser`:
 
       import GreenAsh.Router
 
@@ -12,28 +12,29 @@ defmodule GreenAsh.Router do
         green_ash "/cli"
       end
 
-  Par défaut, les domaines exposés sont lus **dynamiquement, à chaque requête**
-  depuis `Application.get_env(:mon_app, :ash_domains, [])` — la même clé de
-  config que `mix ash.setup`/`mix ash.codegen` utilisent déjà. Ajouter un
-  domaine à cette liste (ce que font les générateurs Ash eux-mêmes) suffit à
-  le faire apparaître dans la console, sans retoucher le routeur ni relancer
-  l'installeur.
+  By default, the exposed domains are read **dynamically, on every request**
+  from `Application.get_env(:my_app, :ash_domains, [])` — the same config key
+  that `mix ash.setup`/`mix ash.codegen` already use. Adding a domain to this
+  list (which the Ash generators themselves do) is enough to make it appear
+  in the console, with no need to touch the router or rerun the installer.
 
-  `domains:` reste disponible pour figer explicitement un sous-ensemble (ou
-  si vos domaines ne sont pas déclarés sous la clé standard) :
+  `domains:` remains available to explicitly pin a subset (or if your domains
+  are not declared under the standard key):
 
       green_ash "/cli", domains: [MyApp.Bank, MyApp.Sales]
   """
 
   @doc """
-  Monte la console sous `path`, dans le `scope` courant.
+  Mounts the console under `path`, in the current `scope`.
 
   ## Options
 
-    * `:domains` — liste explicite de modules `Ash.Domain` à exposer. Si omise
-      (recommandé), lue dynamiquement depuis `Application.get_env(otp_app, :ash_domains, [])`.
-    * `:otp_app` — application OTP dont lire `:ash_domains` par défaut.
-      Déduite automatiquement (`Mix.Project.config()[:app]`) si omise.
+    * `:domains` — explicit list of `Ash.Domain` modules to expose. If
+      omitted (recommended), read dynamically from
+      `Application.get_env(otp_app, :ash_domains, [])`.
+    * `:otp_app` — OTP application from which to read `:ash_domains` by
+      default. Inferred automatically (`Mix.Project.config()[:app]`) if
+      omitted.
   """
   defmacro green_ash(path, opts \\ []) do
     quote bind_quoted: [path: path, opts: opts] do

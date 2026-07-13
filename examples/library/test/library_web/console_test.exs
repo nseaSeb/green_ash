@@ -1,8 +1,9 @@
 defmodule LibraryWeb.ConsoleTest do
   @moduledoc """
-  Tests d'intégration de la console GreenAsh, montée par `mix green_ash.install`
-  (exécuté réellement sur cette app, pas écrit à la main). Éprouve la relation
-  Author <-> Book : rendu de la clé étrangère, filtre, création liée.
+  Integration tests for the GreenAsh console, mounted by
+  `mix green_ash.install` (actually run on this app, not hand-written).
+  Exercises the Author <-> Book relationship: foreign key rendering, filter,
+  linked creation.
   """
   use LibraryWeb.ConnCase
 
@@ -16,13 +17,13 @@ defmodule LibraryWeb.ConsoleTest do
     |> Ash.create!()
   end
 
-  test "le menu découvre les deux resources du domaine", %{conn: conn} do
+  test "the menu discovers both resources of the domain", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/cli")
-    assert html =~ "Auteurs"
-    assert html =~ "Livres"
+    assert html =~ "Authors"
+    assert html =~ "Books"
   end
 
-  test "création d'un Author, puis d'un Book lié (author_id en champ texte)", %{conn: conn} do
+  test "creation of an Author, then a linked Book (author_id as a text field)", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/cli/r/author/a/create")
 
     view
@@ -35,7 +36,7 @@ defmodule LibraryWeb.ConsoleTest do
     assert author
 
     {:ok, view2, html2} = live(conn, "/cli/r/book/a/create")
-    # Ash.Type.UUID (clé étrangère de belongs_to) doit se rendre en texte.
+    # Ash.Type.UUID (belongs_to foreign key) must render as text.
     assert html2 =~ ~s(type="text" id="form_author_id" name="form[author_id]")
 
     view2
@@ -50,7 +51,7 @@ defmodule LibraryWeb.ConsoleTest do
            )
   end
 
-  test "liste des Books avec filtre par titre (read :by_title)", %{conn: conn} do
+  test "list of Books with filter by title (read :by_title)", %{conn: conn} do
     author = create_author("Isaac Asimov")
 
     Book

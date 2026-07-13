@@ -1,16 +1,16 @@
 defmodule GreenAsh.Field do
   @moduledoc """
-  Introspection d'une action Ash -> specs de champs -> type de widget HTML.
+  Introspection of an Ash action -> field specs -> HTML widget type.
 
-  À partir d'une resource et d'une action, liste les champs saisissables
-  (attributs acceptés + arguments) et décide quel widget rendre pour chaque type
-  Ash. Les types non reconnus retombent sur un textarea JSON (avec un log).
+  From a resource and an action, lists the fillable fields (accepted
+  attributes + arguments) and decides which widget to render for each Ash
+  type. Unrecognized types fall back to a JSON textarea (with a log).
   """
   require Logger
 
   @doc """
-  Liste ordonnée des champs saisissables pour `action` sur `resource` :
-  d'abord les attributs acceptés, puis les arguments de l'action.
+  Ordered list of fillable fields for `action` on `resource`: first the
+  accepted attributes, then the action's arguments.
   """
   def specs(resource, action) do
     accepted =
@@ -50,7 +50,7 @@ defmodule GreenAsh.Field do
     }
   end
 
-  @doc "Décide le `type=` du widget HTML pour un type Ash donné."
+  @doc "Decides the HTML widget's `type=` for a given Ash type."
   def input_type(type, constraints) do
     cond do
       enum_values(type, constraints) != nil ->
@@ -80,11 +80,14 @@ defmodule GreenAsh.Field do
   end
 
   defp fallback(type) do
-    Logger.debug("[green_ash] type Ash non mappé, fallback textarea JSON: #{inspect(type)}")
+    Logger.debug(
+      "[green_ash] Ash type not mapped, falling back to JSON textarea: #{inspect(type)}"
+    )
+
     "textarea"
   end
 
-  @doc "Options `{label, value}` pour un widget select, ou nil si non-enum."
+  @doc "Options `{label, value}` for a select widget, or nil if not an enum."
   def options(type, constraints) do
     case enum_values(type, constraints) do
       nil -> nil

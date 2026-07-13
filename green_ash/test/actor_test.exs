@@ -6,8 +6,8 @@ defmodule GreenAsh.ActorTest do
 
   @domains [Bank]
 
-  test "label et résolution depuis la session" do
-    assert Actor.label(nil) == "anonyme"
+  test "label and resolution from the session" do
+    assert Actor.label(nil) == "anonymous"
 
     {:ok, acc} =
       Account

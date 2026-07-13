@@ -1,8 +1,8 @@
 defmodule GreenAsh.Web do
   @moduledoc """
-  Point d'entrée `use GreenAsh.Web, :live_view` pour les LiveViews de la console.
-  N'importe rien de l'application hôte : uniquement Phoenix.LiveView, les
-  composants de la lib et un helper de chemin relatif à la base de montage.
+  Entry point `use GreenAsh.Web, :live_view` for the console's LiveViews.
+  Imports nothing from the host application: only Phoenix.LiveView, the
+  lib's components, and a path helper relative to the mount base.
   """
 
   def live_view do
@@ -16,7 +16,7 @@ defmodule GreenAsh.Web do
     end
   end
 
-  @doc "Construit un chemin absolu à partir de la base de montage (ex. \"/cli\")."
+  @doc "Builds an absolute path from the mount base (e.g. \"/cli\")."
   def ga_path(base, rest), do: base <> rest
 
   defmacro __using__(which) when is_atom(which), do: apply(__MODULE__, which, [])

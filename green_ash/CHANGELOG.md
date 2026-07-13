@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (2026-07-13)
+
+- Translated remaining French console strings and Ash resource labels to
+  English.
+
 ## 0.1.0 (2026-07-12)
 
 Initial release.

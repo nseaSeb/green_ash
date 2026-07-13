@@ -1,8 +1,8 @@
 defmodule GreenAsh.ActorController do
   @moduledoc """
-  Écrit/efface l'acteur de la console en session, puis redirige.
-  Sollicité par la commande `:actor` des LiveViews (qui ne peuvent pas écrire la
-  session via le socket).
+  Writes/clears the console's actor in the session, then redirects.
+  Invoked by the `:actor` command of the LiveViews (which cannot write the
+  session via the socket).
   """
   use Phoenix.Controller, formats: [:html]
   import Plug.Conn

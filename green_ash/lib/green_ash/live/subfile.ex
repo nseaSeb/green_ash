@@ -1,9 +1,9 @@
 defmodule GreenAsh.Live.Subfile do
   @moduledoc """
-  Subfile AS400 : liste des enregistrements d'une action `:read`, avec colonne
-  "Opt" par ligne (codes dérivés des actions : update/destroy/afficher), filtre
-  (arguments de la read action, côté requête), tri de colonne et pagination.
-  Toutes les lectures/suppressions passent l'acteur courant.
+  AS400 subfile: lists the records of a `:read` action, with an "Opt" column
+  per row (codes derived from the actions: update/destroy/display), a filter
+  (arguments of the read action, on the query side), column sorting, and
+  pagination. All reads/deletes pass through the current actor.
   """
   use GreenAsh.Web, :live_view
 
@@ -73,11 +73,11 @@ defmodule GreenAsh.Live.Subfile do
 
     destroy =
       case Enum.filter(actions, &(&1.type == :destroy)) do
-        [d | _] -> [%{code: "4", label: "Supprimer", kind: :destroy, action: d.name}]
+        [d | _] -> [%{code: "4", label: "Delete", kind: :destroy, action: d.name}]
         [] -> []
       end
 
-    updates ++ destroy ++ [%{code: "5", label: "Afficher", kind: :display, action: nil}]
+    updates ++ destroy ++ [%{code: "5", label: "Display", kind: :display, action: nil}]
   end
 
   @impl true
@@ -134,12 +134,12 @@ defmodule GreenAsh.Live.Subfile do
   end
 
   def handle_event("destroy-cancel", _params, socket),
-    do: {:noreply, assign(socket, confirm: [], message: "Suppression annulée.")}
+    do: {:noreply, assign(socket, confirm: [], message: "Deletion cancelled.")}
 
   def handle_event("command", %{"cmd" => cmd}, socket) do
     Command.apply_to(socket, cmd,
       on_debug: fn s ->
-        {:noreply, assign(s, message: "Utilisez l'option 5 pour afficher un enregistrement.")}
+        {:noreply, assign(s, message: "Use option 5 to display a record.")}
       end
     )
   end
@@ -149,7 +149,7 @@ defmodule GreenAsh.Live.Subfile do
 
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
 
-  defp process([], socket), do: {:noreply, assign(socket, message: "Aucune option saisie.")}
+  defp process([], socket), do: {:noreply, assign(socket, message: "No option entered.")}
 
   defp process(entries, socket) do
     codes = socket.assigns.codes
@@ -165,17 +165,16 @@ defmodule GreenAsh.Live.Subfile do
     cond do
       destroys != [] ->
         note =
-          if updates != [], do: " (modifications ignorées : traitez-les séparément)", else: ""
+          if updates != [], do: " (updates ignored: handle them separately)", else: ""
 
-        {:noreply,
-         assign(socket, confirm: destroys, message: "Confirmez la suppression." <> note)}
+        {:noreply, assign(socket, confirm: destroys, message: "Confirm the deletion." <> note)}
 
       length(updates) > 1 ->
         {:noreply,
          socket
          |> assign(
            expanded: display_set(displays),
-           message: "Une seule ligne à modifier à la fois (#{length(updates)} sélectionnées)."
+           message: "Only one row can be edited at a time (#{length(updates)} selected)."
          )
          |> load_rows()}
 
@@ -204,21 +203,21 @@ defmodule GreenAsh.Live.Subfile do
 
     cond do
       forbidden? and done == 0 ->
-        "Interdit : suppression réservée à un acteur (:actor <resource> <id>)."
+        "Forbidden: deletion restricted to an actor (:actor <resource> <id>)."
 
       forbidden? ->
-        "#{done} suppression(s) ; d'autres interdites (acteur requis)."
+        "#{done} deletion(s); others forbidden (actor required)."
 
       true ->
-        "#{done} suppression(s) effectuée(s)."
+        "#{done} deletion(s) completed."
     end
   end
 
   defp message(destroys, displays, unknown) do
     []
-    |> add(destroys != [], "#{length(destroys)} suppression(s)")
-    |> add(displays != [], "#{length(displays)} affichage(s)")
-    |> add(unknown != [], "#{length(unknown)} code(s) inconnu(s)")
+    |> add(destroys != [], "#{length(destroys)} deletion(s)")
+    |> add(displays != [], "#{length(displays)} display(s)")
+    |> add(unknown != [], "#{length(unknown)} unknown code(s)")
     |> case do
       [] -> ""
       parts -> Enum.join(parts, " · ")
@@ -259,16 +258,16 @@ defmodule GreenAsh.Live.Subfile do
     <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
       <div class="crt-head">
         <span>GREEN·ASH / {String.upcase(Registry.resource_label(@resource))}</span>
-        <span class="crt-title">LISTE · {Registry.resource_title(@resource)}</span>
+        <span class="crt-title">LIST · {Registry.resource_title(@resource)}</span>
         <span>◆ {Actor.label(@actor)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 
       <div class="crt-body">
         <div :if={@confirm != []} class="crt-confirm">
-          <p class="crt-err">⚠ Confirmer la suppression de {length(@confirm)} enregistrement(s) ?</p>
-          <button phx-click="destroy-confirm" class="btn">Confirmer</button>
-          <button type="button" phx-click="destroy-cancel" class="crt-linkbtn">Annuler</button>
+          <p class="crt-err">⚠ Confirm deletion of {length(@confirm)} record(s)?</p>
+          <button phx-click="destroy-confirm" class="btn">Confirm</button>
+          <button type="button" phx-click="destroy-cancel" class="crt-linkbtn">Cancel</button>
         </div>
 
         <form :if={@arg_specs != []} phx-change="filter" phx-submit="filter" class="crt-filter">
@@ -276,7 +275,7 @@ defmodule GreenAsh.Live.Subfile do
             :for={spec <- @arg_specs}
             field={@filter_form[spec.name]}
             type={spec.input_type}
-            label={"Filtre — " <> spec.label}
+            label={"Filter — " <> spec.label}
             options={spec.options || []}
             prompt="—"
             {spec.rest}
@@ -320,8 +319,8 @@ defmodule GreenAsh.Live.Subfile do
             </tbody>
           </table>
 
-          <p :if={@rows == []} class="crt-detail">(aucun enregistrement)</p>
-          <button type="submit" class="btn" style="margin-top:.8rem">Valider ⏎</button>
+          <p :if={@rows == []} class="crt-detail">(no records)</p>
+          <button type="submit" class="btn" style="margin-top:.8rem">Submit ⏎</button>
         </form>
 
         <div class="crt-pager">
@@ -332,7 +331,7 @@ defmodule GreenAsh.Live.Subfile do
             phx-value-dir="prev"
             disabled={@page == 0}
           >
-            ‹ Préc
+            ‹ Prev
           </button>
           <span>Page {@page + 1}</span>
           <button
@@ -342,7 +341,7 @@ defmodule GreenAsh.Live.Subfile do
             phx-value-dir="next"
             disabled={!@has_next}
           >
-            Suiv ›
+            Next ›
           </button>
         </div>
       </div>
@@ -351,11 +350,11 @@ defmodule GreenAsh.Live.Subfile do
         <div class="crt-rule"></div>
         <div class="crt-msg">{@message}</div>
         <form phx-submit="command" class="crt-cmd" autocomplete="off">
-          <label>Commande ===></label>
+          <label>Command ===></label>
           <input type="text" name="cmd" value="" id="cmd" />
         </form>
         <div class="crt-keys">
-          <b>Entrée</b>=Valider &nbsp;·&nbsp; <b>Échap</b>=Menu &nbsp;·&nbsp;
+          <b>Enter</b>=Submit &nbsp;·&nbsp; <b>Esc</b>=Menu &nbsp;·&nbsp;
           <b>:actor &lt;r&gt; &lt;id&gt;</b> <b>:whoami</b> <b>:help</b>
         </div>
       </div>

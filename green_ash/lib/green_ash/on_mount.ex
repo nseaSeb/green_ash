@@ -1,12 +1,12 @@
 defmodule GreenAsh.OnMount do
   @moduledoc """
-  `on_mount` posé par la macro de routeur : injecte dans chaque LiveView la liste
-  de domaines, la base de montage et l'acteur courant (résolu depuis la session).
+  `on_mount` set by the router macro: injects into each LiveView the list of
+  domains, the mount base, and the current actor (resolved from the session).
 
-  Sans `domains:` explicite passé à la macro, la liste est lue **à chaque
-  requête** depuis `Application.get_env(otp_app, :ash_domains, [])` — un
-  domaine ajouté après coup (via les générateurs Ash, qui maintiennent déjà
-  cette config) apparaît donc immédiatement, sans réinstallation.
+  Without an explicit `domains:` passed to the macro, the list is read **on
+  every request** from `Application.get_env(otp_app, :ash_domains, [])` — a
+  domain added afterward (via the Ash generators, which already maintain this
+  config) therefore appears immediately, with no reinstallation needed.
   """
   import Phoenix.Component, only: [assign: 2]
 

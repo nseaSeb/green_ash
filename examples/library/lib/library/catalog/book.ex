@@ -1,14 +1,14 @@
 defmodule Library.Catalog.Book do
   @moduledoc """
-  Livre, lié à un auteur (`belongs_to :author`) — exerce le rendu de la clé
-  étrangère (Ash.Type.UUID) et le filtre par titre.
+  Book, linked to an author (`belongs_to :author`) — exercises the rendering
+  of the foreign key (Ash.Type.UUID) and filtering by title.
   """
   use Ash.Resource,
     domain: Library.Catalog,
     data_layer: AshPostgres.DataLayer
 
   resource do
-    description("Livres")
+    description("Books")
   end
 
   postgres do
@@ -41,7 +41,7 @@ defmodule Library.Catalog.Book do
     defaults([:read, :destroy])
 
     read :by_title do
-      description("Rechercher par titre")
+      description("Search by title")
       argument(:title, :string, allow_nil?: true)
       filter(expr(is_nil(^arg(:title)) or contains(title, ^arg(:title))))
     end
