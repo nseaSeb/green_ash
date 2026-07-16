@@ -11,19 +11,58 @@ defmodule GreenAsh.Actor do
 
   def session_key, do: @session_key
 
-  @doc "Resolves the actor from the session (among `domains`), or nil."
-  def from_session(session, domains) do
-    case session do
-      %{@session_key => %{"slug" => slug, "id" => id}} ->
-        with resource when not is_nil(resource) <- Registry.resource_by_slug(domains, slug),
-             {:ok, record} <- Ash.get(resource, id, authorize?: false) do
-          record
-        else
-          _ -> nil
-        end
+  @doc """
+  Resolves the actor stored in the session.
 
-      _ ->
-        nil
+  Returns `:none` when no actor is set, `{:ok, record}` when it loads, and
+  `{:error, message}` when an actor **is** stored but cannot be loaded.
+
+  The distinction matters: falling back to no actor without a word makes the
+  console look like it ran as nobody on purpose. Every policy result then
+  reads as a verdict on the policy when it is really a verdict on an actor
+  that was never loaded. Callers are expected to surface `message`.
+  """
+  def resolve(session, domains) do
+    case session do
+      %{@session_key => %{"slug" => slug, "id" => id}} -> load(domains, slug, id)
+      _ -> :none
+    end
+  end
+
+  defp load(domains, slug, id) do
+    case Registry.resource_by_slug(domains, slug) do
+      nil ->
+        {:error, "Actor dropped: no resource \"#{slug}\" among the exposed domains."}
+
+      resource ->
+        # Asking Registry rather than parsing the error Ash would raise: the
+        # predicate is the same one the console's screens guard on, and it
+        # does not depend on Ash's error shape.
+        if Registry.tenant_required?(resource) do
+          {:error, "Actor dropped: #{slug} requires a tenant, which the console cannot set."}
+        else
+          fetch(resource, slug, id)
+        end
+    end
+  end
+
+  defp fetch(resource, slug, id) do
+    case Ash.get(resource, id, authorize?: false) do
+      {:ok, record} -> {:ok, record}
+      {:error, _} -> {:error, "Actor dropped: no #{slug} found with id #{id}."}
+    end
+  end
+
+  @doc """
+  Resolves the actor from the session (among `domains`), or nil.
+
+  Discards the reason a stored actor failed to load; prefer `resolve/2`,
+  which reports it.
+  """
+  def from_session(session, domains) do
+    case resolve(session, domains) do
+      {:ok, record} -> record
+      _ -> nil
     end
   end
 

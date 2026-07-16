@@ -18,6 +18,22 @@ defmodule GreenAsh.Registry do
   @doc "Actions of a resource."
   def actions(resource), do: Ash.Resource.Info.actions(resource)
 
+  @doc """
+  Whether `resource` cannot be read without a tenant being set.
+
+  Mirrors the check Ash itself performs before running a read
+  (`Ash.Actions.Read.validate_multitenancy/1`): a resource is only
+  constrained if it declares a multitenancy strategy *and* is not `global?`.
+
+  The console has no tenant to offer yet, so such a resource is signalled
+  rather than opened — without this it reaches `Ash.read!/2` and raises
+  `Ash.Error.Invalid.TenantRequired`.
+  """
+  def tenant_required?(resource) do
+    !is_nil(Ash.Resource.Info.multitenancy_strategy(resource)) &&
+      !Ash.Resource.Info.multitenancy_global?(resource)
+  end
+
   @doc "Short label of a resource (last segment of the module)."
   def resource_label(resource), do: resource |> Module.split() |> List.last()
 

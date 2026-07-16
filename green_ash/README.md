@@ -43,7 +43,7 @@ If you'd rather not use Igniter, or want to see exactly what the installer does:
 1. Add the dependency in `mix.exs`:
 
    ```elixir
-   {:green_ash, "~> 0.1"}
+   {:green_ash, "~> 0.2"}
    ```
 
 2. Mount the console in your router, inside a scope going through the

@@ -69,6 +69,55 @@ defmodule GreenAsh.Components do
     """
   end
 
+  # Full screen shown in place of a resource the console cannot open yet.
+  #
+  # Used for multitenant resources: the console has no tenant to set, so any
+  # read would raise `Ash.Error.Invalid.TenantRequired`. Stating that is more
+  # useful than crashing.
+  #
+  # Internal: an inlined screen of the console, not a widget for hosts to
+  # reuse. Kept out of the docs so it stays free to change when tenant
+  # selection lands.
+  @doc false
+  attr :resource, :atom, required: true
+  attr :strategy, :atom, required: true
+
+  def tenant_notice(assigns) do
+    ~H"""
+    <.styles />
+    <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
+      <div class="crt-head">
+        <span>GREEN·ASH / {@resource |> Module.split() |> List.last() |> String.upcase()}</span>
+        <span class="crt-title">TENANT REQUIRED</span>
+        <span>◆ unavailable</span>
+      </div>
+      <div class="crt-rule"></div>
+
+      <div class="crt-body">
+        <div class="crt-confirm">
+          <p>
+            <b>{inspect(@resource)}</b>
+            declares <b>multitenancy strategy {inspect(@strategy)}</b>
+            and is not <b>global?</b>, so Ash refuses any read without a tenant.
+            The console cannot pick one for you: a tenant is application
+            knowledge, not something Ash can introspect.
+          </p>
+        </div>
+        <p class="crt-lead">
+          Picking a tenant from the console is not supported yet, so this
+          resource cannot be browsed here for now.
+        </p>
+      </div>
+
+      <div class="crt-foot">
+        <div class="crt-rule"></div>
+        <div class="crt-msg"></div>
+        <div class="crt-keys"><b>Esc</b>=Back to menu</div>
+      </div>
+    </div>
+    """
+  end
+
   @doc "\"Terminal\"-styled button."
   attr :type, :string, default: "text"
   slot :inner_block, required: true

@@ -9,7 +9,12 @@ defmodule GreenAsh.Live.Menu do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket |> assign(level: :main, resource: nil, message: "") |> assign_options()}
+    # actor_notice, set by OnMount, is the reason a stored actor failed to
+    # load. The menu is where `:actor` lands, so it is where this must show.
+    {:ok,
+     socket
+     |> assign(level: :main, resource: nil, message: socket.assigns.actor_notice || "")
+     |> assign_options()}
   end
 
   @impl true
@@ -41,7 +46,9 @@ defmodule GreenAsh.Live.Menu do
 
   defp dispatch(%{target: {:resource, resource}}, socket) do
     {:noreply,
-     socket |> assign(level: :resource, resource: resource, message: "") |> assign_options()}
+     socket
+     |> assign(level: :resource, resource: resource, message: resource_message(resource))
+     |> assign_options()}
   end
 
   defp dispatch(%{target: {:action, resource, name, :create}}, socket) do
@@ -81,7 +88,7 @@ defmodule GreenAsh.Live.Menu do
         %{
           n: n,
           label: Registry.resource_title(resource),
-          detail: Registry.resource_label(resource),
+          detail: resource_detail(resource),
           target: {:resource, resource}
         }
       end)
@@ -104,6 +111,25 @@ defmodule GreenAsh.Live.Menu do
       end)
 
     assign(socket, options: options)
+  end
+
+  defp resource_detail(resource) do
+    if Registry.tenant_required?(resource) do
+      Registry.resource_label(resource) <> " · tenant required"
+    else
+      Registry.resource_label(resource)
+    end
+  end
+
+  # Said once on entering the resource rather than tagged on each of its
+  # actions: every action is equally unopenable, so per-line labels would
+  # repeat the same word six times and say nothing more.
+  defp resource_message(resource) do
+    if Registry.tenant_required?(resource) do
+      "#{Registry.resource_label(resource)} requires a tenant: no action can be opened here."
+    else
+      ""
+    end
   end
 
   @impl true

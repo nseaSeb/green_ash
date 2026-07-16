@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.0 (2026-07-16)
+
+### Fixed
+
+- **An actor that fails to load no longer vanishes silently.** `:actor
+  <resource> <id>` with a stale id, or a resource no longer among the exposed
+  domains, left the console running as "anonymous" with no explanation. Every
+  policy result after that read as a verdict on the policy when it was really
+  a verdict on an actor that was never loaded. The reason is now shown on the
+  screen. This affects every console, multitenant or not.
+
+- **Multitenant resources no longer crash the console.** A resource declaring
+  a multitenancy strategy without `global? true` cannot be read without a
+  tenant — Ash raises `Ash.Error.Invalid.TenantRequired` — and the console has
+  no tenant to set, so opening one from the menu raised inside `mount/3`. Such
+  resources are now flagged in the menu and open a screen stating the
+  constraint. Resources marked `global? true` are unaffected, matching Ash's
+  own rule.
+
+  Picking a tenant from the console is **not supported yet**: this release
+  turns the crash into an explicit refusal, it does not make multitenant
+  resources browsable.
+
+### Added
+
+- `GreenAsh.Actor.resolve/2`, which reports why a stored actor failed to load
+  (`{:ok, record}` / `:none` / `{:error, message}`). `from_session/2` keeps
+  its contract and still returns the record or nil, discarding the reason.
+- `GreenAsh.Registry.tenant_required?/1`, mirroring the multitenancy check Ash
+  performs before a read.
+- LiveViews mounted in the console receive an `actor_notice` assign alongside
+  `actor`.
+
 ## 0.1.1 (2026-07-13)
 
 - Translated remaining French console strings and Ash resource labels to

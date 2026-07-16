@@ -16,27 +16,37 @@ defmodule GreenAsh.Live.Screen do
         {:ok, push_navigate(socket, to: base)}
 
       resource ->
-        action = Registry.action(resource, params["action"])
-
-        case load_subject(resource, params["id"], actor) do
-          {:ok, subject} ->
-            {:ok,
-             socket
-             |> assign(
-               resource: resource,
-               action: action,
-               subject: subject,
-               specs: Field.specs(resource, action),
-               result: nil,
-               debug: false,
-               message: "",
-               return_to: return_to(resource, base)
-             )
-             |> assign(form: fresh_form(subject, action, actor))}
-
-          :error ->
-            {:ok, push_navigate(socket, to: return_to(resource, base))}
+        if Registry.tenant_required?(resource) do
+          # Escape leads to the menu, not to the list: the list is just as
+          # unopenable, so return_to would otherwise bounce between screens.
+          {:ok, socket |> assign_tenant_notice(resource) |> assign(return_to: base)}
+        else
+          mount_action(socket, resource, params, actor, base)
         end
+    end
+  end
+
+  defp mount_action(socket, resource, params, actor, base) do
+    action = Registry.action(resource, params["action"])
+
+    case load_subject(resource, params["id"], actor) do
+      {:ok, subject} ->
+        {:ok,
+         socket
+         |> assign(
+           resource: resource,
+           action: action,
+           subject: subject,
+           specs: Field.specs(resource, action),
+           result: nil,
+           debug: false,
+           message: socket.assigns.actor_notice || "",
+           return_to: return_to(resource, base)
+         )
+         |> assign(form: fresh_form(subject, action, actor))}
+
+      :error ->
+        {:ok, push_navigate(socket, to: return_to(resource, base))}
     end
   end
 
@@ -109,6 +119,12 @@ defmodule GreenAsh.Live.Screen do
   defp select_prompt(_), do: nil
 
   @impl true
+  def render(%{tenant_notice: true} = assigns) do
+    ~H"""
+    <.tenant_notice resource={@resource} strategy={@strategy} />
+    """
+  end
+
   def render(assigns) do
     ~H"""
     <.styles />

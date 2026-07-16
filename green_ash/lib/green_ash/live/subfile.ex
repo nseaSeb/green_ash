@@ -16,27 +16,35 @@ defmodule GreenAsh.Live.Subfile do
         {:ok, push_navigate(socket, to: socket.assigns.base)}
 
       resource ->
-        action = Registry.action(resource, action_name)
-
-        {:ok,
-         socket
-         |> assign(
-           resource: resource,
-           action: action,
-           codes: build_codes(resource),
-           columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
-           arg_specs: Field.specs(resource, action),
-           args: %{},
-           sort: nil,
-           page: 0,
-           has_next: false,
-           expanded: MapSet.new(),
-           confirm: [],
-           message: ""
-         )
-         |> assign_filter_form()
-         |> load_rows()}
+        if Registry.tenant_required?(resource) do
+          {:ok, assign_tenant_notice(socket, resource)}
+        else
+          mount_rows(socket, resource, action_name)
+        end
     end
+  end
+
+  defp mount_rows(socket, resource, action_name) do
+    action = Registry.action(resource, action_name)
+
+    {:ok,
+     socket
+     |> assign(
+       resource: resource,
+       action: action,
+       codes: build_codes(resource),
+       columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
+       arg_specs: Field.specs(resource, action),
+       args: %{},
+       sort: nil,
+       page: 0,
+       has_next: false,
+       expanded: MapSet.new(),
+       confirm: [],
+       message: socket.assigns.actor_notice || ""
+     )
+     |> assign_filter_form()
+     |> load_rows()}
   end
 
   defp assign_filter_form(socket),
@@ -252,6 +260,12 @@ defmodule GreenAsh.Live.Subfile do
   defp today, do: Calendar.strftime(Date.utc_today(), "%d/%m/%y")
 
   @impl true
+  def render(%{tenant_notice: true} = assigns) do
+    ~H"""
+    <.tenant_notice resource={@resource} strategy={@strategy} />
+    """
+  end
+
   def render(assigns) do
     ~H"""
     <.styles />
