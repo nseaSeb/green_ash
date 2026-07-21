@@ -113,3 +113,58 @@ defmodule GreenAsh.TestSupport.Capped do
     end
   end
 end
+
+# Two resources whose module names end in the same segment, in two domains —
+# the shape that gave both the slug "account" and made the second resolve to
+# the first.
+defmodule GreenAsh.TestSupport.Twin.Bank do
+  @moduledoc false
+  use Ash.Domain, validate_config_inclusion?: false
+
+  resources do
+    resource GreenAsh.TestSupport.Twin.Bank.Account
+  end
+end
+
+defmodule GreenAsh.TestSupport.Twin.Bank.Account do
+  @moduledoc false
+  use Ash.Resource, domain: GreenAsh.TestSupport.Twin.Bank, data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+  end
+
+  actions do
+    defaults [:read]
+  end
+end
+
+defmodule GreenAsh.TestSupport.Twin.Sales do
+  @moduledoc false
+  use Ash.Domain, validate_config_inclusion?: false
+
+  resources do
+    resource GreenAsh.TestSupport.Twin.Sales.Account
+  end
+end
+
+defmodule GreenAsh.TestSupport.Twin.Sales.Account do
+  @moduledoc false
+  use Ash.Resource, domain: GreenAsh.TestSupport.Twin.Sales, data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+  end
+
+  actions do
+    defaults [:read]
+  end
+end

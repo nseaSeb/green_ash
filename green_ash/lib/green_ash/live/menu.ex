@@ -54,14 +54,22 @@ defmodule GreenAsh.Live.Menu do
   defp dispatch(%{target: {:action, resource, name, :create}}, socket) do
     {:noreply,
      push_navigate(socket,
-       to: ga_path(socket.assigns.base, "/r/#{Registry.resource_slug(resource)}/a/#{name}")
+       to:
+         ga_path(
+           socket.assigns.base,
+           "/r/#{Registry.resource_slug(resource, socket.assigns.domains)}/a/#{name}"
+         )
      )}
   end
 
   defp dispatch(%{target: {:action, resource, name, :read}}, socket) do
     {:noreply,
      push_navigate(socket,
-       to: ga_path(socket.assigns.base, "/r/#{Registry.resource_slug(resource)}/list/#{name}")
+       to:
+         ga_path(
+           socket.assigns.base,
+           "/r/#{Registry.resource_slug(resource, socket.assigns.domains)}/list/#{name}"
+         )
      )}
   end
 

@@ -62,12 +62,12 @@ defmodule GreenAsh.Live.Screen do
            result: nil,
            debug: false,
            message: socket.assigns.actor_notice || "",
-           return_to: return_to(resource, base)
+           return_to: return_to(resource, base, socket.assigns.domains)
          )
          |> assign(form: fresh_form(subject, action, actor))}
 
       :error ->
-        {:ok, push_navigate(socket, to: return_to(resource, base))}
+        {:ok, push_navigate(socket, to: return_to(resource, base, socket.assigns.domains))}
     end
   end
 
@@ -82,10 +82,10 @@ defmodule GreenAsh.Live.Screen do
     end
   end
 
-  defp return_to(resource, base) do
+  defp return_to(resource, base, domains) do
     case Ash.Resource.Info.primary_action(resource, :read) do
       nil -> base
-      read -> ga_path(base, "/r/#{Registry.resource_slug(resource)}/list/#{read.name}")
+      read -> ga_path(base, "/r/#{Registry.resource_slug(resource, domains)}/list/#{read.name}")
     end
   end
 

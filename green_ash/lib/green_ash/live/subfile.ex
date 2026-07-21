@@ -299,7 +299,7 @@ defmodule GreenAsh.Live.Subfile do
 
       match?([_], updates) ->
         [{rec, action}] = updates
-        slug = Registry.resource_slug(socket.assigns.resource)
+        slug = Registry.resource_slug(socket.assigns.resource, socket.assigns.domains)
 
         {:noreply,
          push_navigate(socket,

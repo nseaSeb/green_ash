@@ -42,12 +42,51 @@ defmodule GreenAsh.Registry do
     Ash.Resource.Info.description(resource) || resource_label(resource)
   end
 
-  @doc "URL slug of a resource (e.g.: MyApp.Bank.Account -> \"account\")."
-  def resource_slug(resource), do: resource |> resource_label() |> Macro.underscore()
+  @doc """
+  URL slug of a resource, unique among those `domains` expose
+  (e.g. `MyApp.Bank.Account` -> `"account"`).
+
+  The short form — the last module segment — is used wherever it is
+  unambiguous, so slugs stay stable for the common case. It cannot be used
+  blindly, though: `MyApp.Bank.Account` and `MyApp.Sales.Account` both end in
+  `Account`, and giving them one slug does not merely hide the second. Every
+  link to it, and every `:actor` naming it, resolves to the first instead —
+  the console then shows one resource while claiming to show the other, with
+  nothing on screen to suggest it. Colliding resources take a domain-qualified
+  slug (`"bank_account"`), lengthening until they differ.
+  """
+  def resource_slug(resource, domains) do
+    unique_slug(resource, resources(domains))
+  end
 
   @doc "Resource matching a slug among `domains`, or nil."
-  def resource_by_slug(domains, slug),
-    do: Enum.find(resources(domains), &(resource_slug(&1) == slug))
+  def resource_by_slug(domains, slug) do
+    resources = resources(domains)
+    Enum.find(resources, &(unique_slug(&1, resources) == slug))
+  end
+
+  defp unique_slug(resource, resources) do
+    candidates = slug_candidates(resource)
+    others = List.delete(resources, resource)
+
+    Enum.find(
+      candidates,
+      List.last(candidates),
+      fn candidate -> not Enum.any?(others, &(candidate in slug_candidates(&1))) end
+    )
+  end
+
+  # Increasingly qualified slugs: "account", "bank_account", "my_app_bank_account".
+  # Comparing whole candidate lists rather than same-rank pairs keeps the
+  # choice symmetric — each of two colliding resources rejects the short form
+  # for the same reason, so neither can keep it.
+  defp slug_candidates(resource) do
+    segments = Module.split(resource)
+
+    for n <- 1..length(segments) do
+      segments |> Enum.take(-n) |> Enum.map_join("_", &Macro.underscore/1)
+    end
+  end
 
   @doc """
   Action struct by name (string or atom), or nil when `resource` declares no

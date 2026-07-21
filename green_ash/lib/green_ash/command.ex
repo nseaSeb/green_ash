@@ -94,8 +94,11 @@ defmodule GreenAsh.Command do
   defp command(c, [slug], base, domains) when c in ~w(list ls l) do
     with_resource(domains, slug, fn resource ->
       case Ash.Resource.Info.primary_action(resource, :read) do
-        nil -> {:message, "No primary read for #{slug}."}
-        read -> {:navigate, "#{base}/r/#{Registry.resource_slug(resource)}/list/#{read.name}"}
+        nil ->
+          {:message, "No primary read for #{slug}."}
+
+        read ->
+          {:navigate, "#{base}/r/#{Registry.resource_slug(resource, domains)}/list/#{read.name}"}
       end
     end)
   end
@@ -103,8 +106,11 @@ defmodule GreenAsh.Command do
   defp command(c, [slug], base, domains) when c in ~w(new open create) do
     with_resource(domains, slug, fn resource ->
       case Ash.Resource.Info.primary_action(resource, :create) do
-        nil -> {:message, "No primary create for #{slug}."}
-        create -> {:navigate, "#{base}/r/#{Registry.resource_slug(resource)}/a/#{create.name}"}
+        nil ->
+          {:message, "No primary create for #{slug}."}
+
+        create ->
+          {:navigate, "#{base}/r/#{Registry.resource_slug(resource, domains)}/a/#{create.name}"}
       end
     end)
   end

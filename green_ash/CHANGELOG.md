@@ -47,10 +47,22 @@ screen. All four are covered by tests now.
   client; it is now matched against the columns actually rendered, and an
   unknown one is ignored rather than raising.
 
+- **Two resources sharing a module segment no longer share a slug.** Slugs
+  were the last module segment, so `MyApp.Bank.Account` and
+  `MyApp.Sales.Account` were both `"account"` — an ordinary shape once an app
+  has more than one domain. This did not merely hide the second resource:
+  every link to it, every `:list` and every `:actor` naming it, resolved to
+  the first, so the console showed one resource while claiming to show
+  another. Colliding resources now take a domain-qualified slug
+  (`"bank_account"`). Slugs are unchanged wherever nothing collides, so
+  existing URLs stay put.
+
 ### Changed
 
 - `GreenAsh.Registry.action/2` returns `nil` for an unknown action name
   instead of raising.
+- `GreenAsh.Registry.resource_slug/1` becomes `resource_slug/2`, taking the
+  exposed domains: a slug cannot be known to be unambiguous without them.
 - The internal `tenant_notice` assign is now `notice`, one shape covering
   every screen the console refuses to open. `GreenAsh.Components.tenant_notice/1`
   becomes `GreenAsh.Components.notice/1`, taking the notice map. Both were
