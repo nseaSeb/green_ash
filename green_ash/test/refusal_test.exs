@@ -161,6 +161,19 @@ defmodule GreenAsh.RefusalTest do
       refute next.assigns.has_next
     end
 
+    test "paging an unordered read repeats nothing and skips nothing" do
+      # Nothing obliges a data layer to return rows in the same order twice, so
+      # without a tiebreaker a record can land on both pages or on neither.
+      # ETS happens to be stable, which is exactly why this is asserted rather
+      # than assumed — the bank example runs the same walk on Postgres.
+      for n <- 1..45, do: Ash.create!(Entry, %{title: "row #{n}"})
+
+      titles = walk_pages("entry", "read", & &1.title)
+
+      assert length(titles) == 45
+      assert length(Enum.uniq(titles)) == 45
+    end
+
     test "an action capping pages below the console's page size loses no record" do
       # Ash answers a `:page` read above `max_page_size` with a short page, not
       # an error. Sizing the console's page off its own constant would show 11
@@ -183,16 +196,16 @@ defmodule GreenAsh.RefusalTest do
     end
 
     # Walks "Next" to exhaustion, collecting every row the console shows.
-    defp walk_pages(slug, action) do
+    defp walk_pages(slug, action, field \\ & &1.n) do
       {:ok, socket} = mount_list(slug, action)
-      collect(socket, [])
+      collect(socket, [], field)
     end
 
-    defp collect(socket, acc) do
-      acc = acc ++ Enum.map(socket.assigns.rows, & &1.n)
+    defp collect(socket, acc, field) do
+      acc = acc ++ Enum.map(socket.assigns.rows, field)
 
       if socket.assigns.has_next do
-        collect(next_page(socket), acc)
+        collect(next_page(socket), acc, field)
       else
         acc
       end

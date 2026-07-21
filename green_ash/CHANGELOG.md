@@ -4,6 +4,29 @@
 
 ### Added
 
+- **A `belongs_to` is a choice now, not a UUID you paste.** The action screen
+  rendered a foreign key as what it is underneath — a box wanting a raw id —
+  so filling one in meant leaving the console, listing the other resource,
+  copying an id and coming back. The field offers the related records,
+  labelled by name and a slice of the id, and is titled after the
+  relationship rather than the column (`Account`, not `Account id`).
+
+  It offers them only where it honestly can. Past 100 related records, or when
+  the destination needs a tenant the console cannot set, or when the current
+  actor may not read it, the field stays the id box it was — an empty select
+  would read as "there are none". Introspection alone cannot know any of
+  this, so the read is a separate step (`GreenAsh.Field.with_options/2`);
+  `specs/2` still touches no data.
+
+### Fixed
+
+- **Paging an unordered read could repeat a record on two pages, or show it on
+  neither.** Nothing obliges a data layer to return rows in the same order
+  twice, and most reads declare no sort. The primary key is now appended as a
+  final tiebreaker, which leaves your sort — and any the action declares — in
+  charge and only settles what they leave open. Found by a test of the
+  console's own paging that passed or failed depending on the run.
+
 - **Columns are yours to choose.** Lists rendered every public attribute at a
   fixed width of twelve characters, which on any real resource is a wall of
   truncated stubs. `:cols holder balance` picks them, in the order given;

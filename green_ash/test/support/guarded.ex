@@ -168,3 +168,79 @@ defmodule GreenAsh.TestSupport.Twin.Sales.Account do
     defaults [:read]
   end
 end
+
+# A belongs_to whose destination is readable, one whose destination is
+# policy-protected, and one whose destination needs a tenant — the three
+# answers a relationship picker has to give.
+defmodule GreenAsh.TestSupport.Shelf do
+  @moduledoc false
+  use Ash.Domain, validate_config_inclusion?: false
+
+  resources do
+    resource GreenAsh.TestSupport.Author
+    resource GreenAsh.TestSupport.Book
+  end
+end
+
+defmodule GreenAsh.TestSupport.Author do
+  @moduledoc false
+  use Ash.Resource, domain: GreenAsh.TestSupport.Shelf, data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :name, :string, public?: true
+  end
+
+  actions do
+    defaults [:read]
+
+    create :create do
+      primary? true
+      accept [:name]
+    end
+  end
+end
+
+defmodule GreenAsh.TestSupport.Book do
+  @moduledoc false
+  use Ash.Resource, domain: GreenAsh.TestSupport.Shelf, data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, public?: true
+  end
+
+  relationships do
+    belongs_to :author, GreenAsh.TestSupport.Author do
+      public? true
+      attribute_public? true
+    end
+
+    belongs_to :vault, GreenAsh.TestSupport.Secret do
+      public? true
+      attribute_public? true
+    end
+
+    belongs_to :project, GreenAsh.TestSupport.Project do
+      public? true
+      attribute_public? true
+    end
+  end
+
+  actions do
+    defaults [:read]
+
+    create :create do
+      primary? true
+      accept [:title, :author_id, :vault_id, :project_id]
+    end
+  end
+end

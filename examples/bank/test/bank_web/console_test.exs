@@ -91,7 +91,7 @@ defmodule BankWeb.ConsoleTest do
     assert html =~ "Account:"
   end
 
-  test "belongs_to relationship: menu lists Transaction, account_id renders as text, creation OK",
+  test "belongs_to relationship: the account is picked from a list, not typed as a UUID",
        %{conn: conn} do
     {:ok, _view, menu_html} = live(conn, "/cli")
     assert menu_html =~ "Transactions"
@@ -99,8 +99,13 @@ defmodule BankWeb.ConsoleTest do
     acc = open_account("Alice", "100")
 
     {:ok, view, html} = live(conn, "/cli/r/transaction/a/create")
-    # Ash.Type.UUID must render as a text field, not fall back to textarea/JSON.
-    assert html =~ ~s(type="text" id="form_account_id" name="form[account_id]")
+
+    # The foreign key is a choice of real records now. It used to render as a
+    # text box wanting a raw id, which meant leaving the console to find one.
+    assert html =~ ~s(<select id="form_account_id")
+    assert html =~ "Alice"
+    assert html =~ String.slice(acc.id, 0, 8)
+    refute html =~ ~s(type="text" id="form_account_id")
 
     view
     |> form("form[phx-submit='submit']", form: %{"account_id" => acc.id, "amount" => "42"})

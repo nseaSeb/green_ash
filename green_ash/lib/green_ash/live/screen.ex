@@ -58,7 +58,7 @@ defmodule GreenAsh.Live.Screen do
            resource: resource,
            action: action,
            subject: subject,
-           specs: Field.specs(resource, action),
+           specs: resource |> Field.specs(action) |> Field.with_options(actor),
            result: nil,
            debug: false,
            message: socket.assigns.actor_notice || "",
@@ -212,5 +212,11 @@ defmodule GreenAsh.Live.Screen do
   defp short(module), do: module |> Module.split() |> List.last()
 
   defp label(%{kind: :argument} = spec), do: spec.label <> " (arg)"
+
+  # A picker is showing related records, so name the relationship rather than
+  # the column it writes to: "Account", not "Account id".
+  defp label(%{relationship: rel, input_type: "select"}) when not is_nil(rel),
+    do: rel.name |> Phoenix.Naming.humanize() |> to_string()
+
   defp label(spec), do: spec.label
 end

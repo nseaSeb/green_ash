@@ -195,6 +195,7 @@ defmodule GreenAsh.Live.Subfile do
     resource
     |> Ash.Query.for_read(action.name, args, actor: actor)
     |> maybe_sort(sort)
+    |> stable_sort(resource)
     |> read(pagination, per_page, actor, page)
     |> case do
       {:ok, rows} ->
@@ -276,6 +277,18 @@ defmodule GreenAsh.Live.Subfile do
 
   defp maybe_sort(query, nil), do: query
   defp maybe_sort(query, {field, dir}), do: Ash.Query.sort(query, [{field, dir}])
+
+  # Paging an unordered read is not reliable: nothing obliges the data layer to
+  # return the rows in the same order twice, so a record can sit on both pages
+  # or on neither. Appending the primary key breaks every tie, which leaves the
+  # chosen sort (and any the action declares) in charge and only settles what
+  # they leave open.
+  defp stable_sort(query, resource) do
+    case Ash.Resource.Info.primary_key(resource) do
+      [] -> query
+      keys -> Ash.Query.sort(query, Enum.map(keys, &{&1, :asc}))
+    end
+  end
 
   defp build_codes(resource) do
     actions = Registry.actions(resource)
