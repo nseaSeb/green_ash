@@ -144,4 +144,38 @@ defmodule BankWeb.ConsoleTest do
       assert length(Enum.uniq(first ++ second)) == 25, "records were skipped between pages"
     end
   end
+
+  describe "the screen lives in the URL" do
+    setup do
+      for n <- 1..25, do: open_account("H#{String.pad_leading(to_string(n), 2, "0")}", "#{n}")
+      :ok
+    end
+
+    test "a pasted link reproduces filter, sort and page", %{conn: conn} do
+      {:ok, _view, html} =
+        live(conn, "/cli/r/account/list/search?filter[holder]=H2&sort=balance:desc&page=1")
+
+      # H2, H20..H25 sorted by balance desc: H25 first.
+      assert html =~ "H25"
+      refute html =~ "H19"
+    end
+
+    test "clicking a column header puts the sort in the address bar", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/cli/r/account/list/read")
+
+      view |> element("th", "Holder") |> render_click()
+
+      assert_patched(view, "/cli/r/account/list/read?sort=holder%3Aasc")
+    end
+
+    test "paging is a patch, and going back returns the first page", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/cli/r/account/list/read")
+
+      view |> element("button[phx-value-dir=next]") |> render_click()
+      assert_patched(view, "/cli/r/account/list/read?page=2")
+
+      view |> element("button[phx-value-dir=prev]") |> render_click()
+      assert_patched(view, "/cli/r/account/list/read")
+    end
+  end
 end

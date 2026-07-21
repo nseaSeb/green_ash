@@ -34,8 +34,41 @@ defmodule GreenAsh.RefusalTest do
     |> IO.iodata_to_binary()
   end
 
+  # Filter/sort/page live in the URL, so the screen is only settled once
+  # handle_params has run — LiveView calls it right after mount. Refusals stop
+  # at mount and have no params to read.
   defp mount_list(slug, action, assigns \\ %{}) do
-    Subfile.mount(%{"resource" => slug, "action" => action}, %{}, socket(assigns))
+    case Subfile.mount(%{"resource" => slug, "action" => action}, %{}, socket(assigns)) do
+      {:ok, %{assigns: %{notice: _}} = socket} -> {:ok, socket}
+      {:ok, %{redirected: r} = socket} when not is_nil(r) -> {:ok, socket}
+      {:ok, socket} -> params(socket, %{})
+    end
+  end
+
+  defp params(socket, params) do
+    {:noreply, socket} = Subfile.handle_params(params, "/cli", socket)
+    {:ok, socket}
+  end
+
+  # Replays a push_patch the way the browser would: take the path the event
+  # produced, and hand its query back to handle_params.
+  defp follow_patch(socket) do
+    {:live, :patch, %{to: to}} = socket.redirected
+    query = to |> URI.parse() |> Map.get(:query) |> decode_query()
+    {:ok, socket} = params(%{socket | redirected: nil}, query)
+    socket
+  end
+
+  defp decode_query(nil), do: %{}
+  defp decode_query(query), do: Plug.Conn.Query.decode(query)
+
+  defp next_page(socket), do: socket |> event("page", %{"dir" => "next"}) |> follow_patch()
+  defp filter(socket, args), do: socket |> event("filter", %{"filter" => args}) |> follow_patch()
+  defp sort_by(socket, col), do: socket |> event("sort", %{"col" => col}) |> follow_patch()
+
+  defp event(socket, name, params) do
+    {:noreply, socket} = Subfile.handle_event(name, params, socket)
+    socket
   end
 
   describe "a read denied by a policy" do
@@ -123,7 +156,7 @@ defmodule GreenAsh.RefusalTest do
       assert length(mounted.assigns.rows) == 20
       assert mounted.assigns.has_next
 
-      {:noreply, next} = Subfile.handle_event("page", %{"dir" => "next"}, mounted)
+      next = next_page(mounted)
       assert length(next.assigns.rows) == 1
       refute next.assigns.has_next
     end
@@ -159,8 +192,7 @@ defmodule GreenAsh.RefusalTest do
       acc = acc ++ Enum.map(socket.assigns.rows, & &1.n)
 
       if socket.assigns.has_next do
-        {:noreply, next} = Subfile.handle_event("page", %{"dir" => "next"}, socket)
-        collect(next, acc)
+        collect(next_page(socket), acc)
       else
         acc
       end
@@ -217,18 +249,13 @@ defmodule GreenAsh.RefusalTest do
   # filter form posts it on change.
   describe "a filter value that will not cast" do
     defp mount_search do
-      Subfile.mount(
-        %{"resource" => "account", "action" => "search"},
-        %{},
-        socket(%{domains: [GreenAsh.TestSupport.Bank]})
-      )
+      mount_list("account", "search", %{domains: [GreenAsh.TestSupport.Bank]})
     end
 
     test "the error lands on the status line and the screen survives" do
       {:ok, mounted} = mount_search()
 
-      assert {:noreply, filtered} =
-               Subfile.handle_event("filter", %{"filter" => %{"holder" => %{"a" => 1}}}, mounted)
+      filtered = filter(mounted, %{"holder" => %{"a" => 1}})
 
       assert filtered.assigns.rows == []
       assert filtered.assigns.read_error =~ "Read failed"
@@ -243,14 +270,10 @@ defmodule GreenAsh.RefusalTest do
       Ash.create!(GreenAsh.TestSupport.Account, %{holder: "Ada"}, action: :open)
       {:ok, mounted} = mount_search()
 
-      {:noreply, broken} =
-        Subfile.handle_event("filter", %{"filter" => %{"holder" => %{"a" => 1}}}, mounted)
-
+      broken = filter(mounted, %{"holder" => %{"a" => 1}})
       assert broken.assigns.read_error
 
-      {:noreply, fixed} =
-        Subfile.handle_event("filter", %{"filter" => %{"holder" => "Ada"}}, broken)
-
+      fixed = filter(broken, %{"holder" => "Ada"})
       assert fixed.assigns.read_error == nil
       assert [%{holder: "Ada"}] = fixed.assigns.rows
     end
@@ -271,7 +294,7 @@ defmodule GreenAsh.RefusalTest do
       actor = Ash.create!(Secret, %{label: "agent"}, authorize?: false)
       {:ok, mounted} = mount_list("secret", "read", %{actor: actor})
 
-      {:noreply, socket} = Subfile.handle_event("sort", %{"col" => "label"}, mounted)
+      socket = sort_by(mounted, "label")
       assert socket.assigns.sort == {:label, :asc}
     end
   end

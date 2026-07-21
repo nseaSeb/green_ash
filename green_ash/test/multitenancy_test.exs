@@ -23,6 +23,16 @@ defmodule GreenAsh.MultitenancyTest do
     |> Map.merge(if actor, do: %{GreenAsh.Actor.session_key() => actor}, else: %{})
   end
 
+  # Filter/sort/page come from the URL, so a list screen is only settled once
+  # handle_params has run — as LiveView does right after mount.
+  defp mount_list(slug, action) do
+    {:ok, socket} =
+      GreenAsh.Live.Subfile.mount(%{"resource" => slug, "action" => action}, %{}, socket(%{}))
+
+    {:noreply, socket} = GreenAsh.Live.Subfile.handle_params(%{}, "/cli", socket)
+    {:ok, socket}
+  end
+
   defp on_mount(session) do
     GreenAsh.OnMount.on_mount(:default, %{}, session, %Phoenix.LiveView.Socket{
       assigns: %{__changed__: %{}}
@@ -120,12 +130,7 @@ defmodule GreenAsh.MultitenancyTest do
     end
 
     test "a non-tenant resource still mounts normally" do
-      assert {:ok, mounted} =
-               GreenAsh.Live.Subfile.mount(
-                 %{"resource" => "org", "action" => "read"},
-                 %{},
-                 socket(%{})
-               )
+      assert {:ok, mounted} = mount_list("org", "read")
 
       refute Map.has_key?(mounted.assigns, :notice)
       assert mounted.assigns.rows == []
@@ -207,8 +212,7 @@ defmodule GreenAsh.MultitenancyTest do
     end
 
     test "an ordinary resource still renders its real screen" do
-      {:ok, mounted} =
-        GreenAsh.Live.Subfile.mount(%{"resource" => "org", "action" => "read"}, %{}, socket(%{}))
+      {:ok, mounted} = mount_list("org", "read")
 
       html = render_view(GreenAsh.Live.Subfile, mounted.assigns)
 

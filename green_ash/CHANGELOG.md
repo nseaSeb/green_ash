@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+### Added
+
+- **Filter, sort and page live in the URL.** They were socket state only: a
+  reload dropped you back on an unsorted, unfiltered first page, and a screen
+  could not be handed to anyone — the address bar said the same thing whatever
+  you were looking at. They are now query parameters
+  (`?filter[holder]=Ada&sort=balance:desc&page=2`), read in `handle_params/3`,
+  so a pasted link reproduces the screen and the browser's Back button walks
+  the list the way it looks like it should. Values from the query are checked
+  against the screen before use: an unknown sort column or a nonsense page is
+  dropped, not obeyed. The first page is left out of the URL rather than
+  spelled out.
+
 ## 0.3.0 (2026-07-21)
 
 Finishes what 0.2.0 started. That release turned two crashes into explicit

@@ -47,12 +47,14 @@ defmodule GreenAsh.Live.Subfile do
     end
   end
 
+  # Only what the URL cannot say is settled here. Filter, sort and page come
+  # from the query string, so they are read in `handle_params/3` — which
+  # LiveView runs after mount and on every patch alike.
   defp mount_rows(socket, resource, action) do
     pagination = required_pagination(action)
 
     {:ok,
-     socket
-     |> assign(
+     assign(socket,
        resource: resource,
        action: action,
        pagination: pagination,
@@ -60,18 +62,89 @@ defmodule GreenAsh.Live.Subfile do
        codes: build_codes(resource),
        columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
        arg_specs: Field.specs(resource, action),
-       args: %{},
-       sort: nil,
-       page: 0,
+       list_path: list_path(socket, resource, action),
        has_next: false,
        expanded: MapSet.new(),
        confirm: [],
        read_error: nil,
        message: socket.assigns.actor_notice || ""
+     )}
+  end
+
+  defp list_path(socket, resource, action) do
+    slug = Registry.resource_slug(resource, socket.assigns.domains)
+    ga_path(socket.assigns.base, "/r/#{slug}/list/#{action.name}")
+  end
+
+  # A screen the console cannot open has no rows to read and no state to take
+  # from the URL.
+  @impl true
+  def handle_params(_params, _uri, %{assigns: %{notice: _}} = socket), do: {:noreply, socket}
+
+  def handle_params(params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       args: filter_params(params),
+       sort: parse_sort(params["sort"], socket.assigns.columns),
+       page: parse_page(params["page"])
      )
      |> assign_filter_form()
      |> load_rows()}
   end
+
+  defp filter_params(%{"filter" => filter}) when is_map(filter), do: filter
+  defp filter_params(_params), do: %{}
+
+  # Pages are 1-based in the URL and 0-based inside: "page 1" is what the
+  # pager already shows, and a shared link should say the same number.
+  defp parse_page(value) do
+    case Integer.parse(to_string(value)) do
+      {n, ""} when n > 1 -> n - 1
+      _ -> 0
+    end
+  end
+
+  # "balance:desc". Both halves are checked against what this screen actually
+  # has — the string arrives from the URL, so it is a request, not a fact.
+  defp parse_sort(value, columns) do
+    with [field, dir] <- String.split(to_string(value), ":", parts: 2),
+         {:ok, dir} <- sort_direction(dir),
+         col when not is_nil(col) <- Enum.find(columns, &(to_string(&1) == field)) do
+      {col, dir}
+    else
+      _ -> nil
+    end
+  end
+
+  defp sort_direction("asc"), do: {:ok, :asc}
+  defp sort_direction("desc"), do: {:ok, :desc}
+  defp sort_direction(_other), do: :error
+
+  # The screen's whole state as a path, so that every navigation is a patch and
+  # a reload lands on the same screen.
+  defp patch_to(socket, changes) do
+    params =
+      %{
+        "filter" => socket.assigns.args,
+        "sort" => encode_sort(socket.assigns.sort),
+        "page" => encode_page(socket.assigns.page)
+      }
+      |> Map.merge(changes)
+      |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}] end)
+      |> Map.new()
+
+    socket.assigns.list_path <> query_string(params)
+  end
+
+  defp query_string(params) when map_size(params) == 0, do: ""
+  defp query_string(params), do: "?" <> Plug.Conn.Query.encode(params)
+
+  defp encode_sort(nil), do: nil
+  defp encode_sort({field, dir}), do: "#{field}:#{dir}"
+
+  defp encode_page(0), do: nil
+  defp encode_page(page), do: to_string(page + 1)
 
   defp assign_filter_form(socket),
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
@@ -192,19 +265,24 @@ defmodule GreenAsh.Live.Subfile do
     updates ++ destroy ++ [%{code: "5", label: "Display", kind: :display, action: nil}]
   end
 
+  # Filter, sort and page all patch the URL rather than assigning directly:
+  # `handle_params/3` is then the single place that reads the screen's state,
+  # whether it came from a click or from someone pasting the link.
   @impl true
   def handle_event("filter", %{"filter" => params}, socket) do
-    {:noreply, socket |> assign(args: params, page: 0) |> assign_filter_form() |> load_rows()}
+    {:noreply, push_patch(socket, to: patch_to(socket, %{"filter" => params, "page" => nil}))}
   end
 
-  def handle_event("page", %{"dir" => "next"}, socket) do
-    if socket.assigns.has_next,
-      do: {:noreply, socket |> update(:page, &(&1 + 1)) |> load_rows()},
-      else: {:noreply, socket}
-  end
+  def handle_event("page", %{"dir" => dir}, socket) do
+    %{page: page, has_next: has_next} = socket.assigns
 
-  def handle_event("page", %{"dir" => "prev"}, socket) do
-    {:noreply, socket |> update(:page, &max(&1 - 1, 0)) |> load_rows()}
+    page =
+      case dir do
+        "next" -> if has_next, do: page + 1, else: page
+        _prev -> max(page - 1, 0)
+      end
+
+    {:noreply, push_patch(socket, to: patch_to(socket, %{"page" => encode_page(page)}))}
   end
 
   # The column name comes off the wire, so it is matched against the columns
@@ -216,8 +294,8 @@ defmodule GreenAsh.Live.Subfile do
         {:noreply, socket}
 
       field ->
-        {:noreply,
-         socket |> assign(sort: next_sort(socket.assigns.sort, field), page: 0) |> load_rows()}
+        sort = encode_sort(next_sort(socket.assigns.sort, field))
+        {:noreply, push_patch(socket, to: patch_to(socket, %{"sort" => sort, "page" => nil}))}
     end
   end
 
