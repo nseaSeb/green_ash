@@ -4,8 +4,9 @@
 
 Finishes what 0.2.0 started. That release turned two crashes into explicit
 refusals (an actor that fails to load, a resource requiring a tenant); the
-same class remained on four other paths, each of them a 500 rather than a
-screen. All four are covered by tests now.
+same class remained on six other paths, each of them a 500 rather than a
+screen. A seventh bug did the opposite — it answered confidently with the
+wrong resource. All are covered by tests now.
 
 ### Fixed
 
@@ -61,11 +62,12 @@ screen. All four are covered by tests now.
 
 - `GreenAsh.Registry.action/2` returns `nil` for an unknown action name
   instead of raising.
-- `GreenAsh.Registry.resource_slug/1` becomes `resource_slug/2`, taking the
-  exposed domains: a slug cannot be known to be unambiguous without them.
+- `GreenAsh.Registry.resource_slug/2` replaces the former one-argument version,
+  taking the exposed domains: a slug cannot be known to be unambiguous without
+  them.
 - The internal `tenant_notice` assign is now `notice`, one shape covering
-  every screen the console refuses to open. `GreenAsh.Components.tenant_notice/1`
-  becomes `GreenAsh.Components.notice/1`, taking the notice map. Both were
+  every screen the console refuses to open. `Components.tenant_notice/1`
+  becomes `Components.notice/1`, taking the notice map. Both were
   `@doc false` internals.
 
 ### Added

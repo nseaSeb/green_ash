@@ -43,20 +43,34 @@ If you'd rather not use Igniter, or want to see exactly what the installer does:
 1. Add the dependency in `mix.exs`:
 
    ```elixir
-   {:green_ash, "~> 0.2"}
+   {:green_ash, "~> 0.3"}
    ```
 
 2. Mount the console in your router, inside a scope going through the
-   `:browser` pipeline (session required):
+   `:browser` pipeline (session required), and **behind a dev-only guard**:
 
    ```elixir
-   import GreenAsh.Router
+   if Application.compile_env(:my_app, :dev_routes) do
+     import GreenAsh.Router
 
-   scope "/" do
-     pipe_through :browser
-     green_ash "/cli"
+     scope "/" do
+       pipe_through :browser
+       green_ash "/cli"
+     end
    end
    ```
+
+> **Gate it. The console has no access control of its own.**
+>
+> It lists, creates, updates and deletes any record of any exposed resource,
+> and its `:actor` command loads any record as the current actor to exercise
+> your policies — that impersonation is the whole point of the tool. Reachable
+> in production, it is an unauthenticated admin panel over your whole domain.
+>
+> The Igniter installer wraps the mount in the `:dev_routes` check above, which
+> is why it is repeated here: mounting by hand is the one path where nothing
+> stops the console shipping. If you need it somewhere other than dev, put it
+> behind your own authentication pipeline.
 
 That's it. `/cli` lists your Ash resources, and for each one: create,
 list (filter + sort + pagination), business-action update/destroy (with
@@ -76,10 +90,8 @@ key? Pass `domains:` explicitly to override the default:
 green_ash "/cli", domains: [MyApp.Bank, MyApp.Sales]
 ```
 
-**Recommended**: keep the route dev-only (as the installer does), guarding it
-with `if Application.compile_env(:my_app, :dev_routes) do ... end` — the
-console lets you create/update/destroy records without your app's own
-authentication, so it isn't a production admin panel.
+Whichever you pass, keep the route behind the dev-only guard shown under
+[Installation](#manually) — the console carries no access control of its own.
 
 ## Using the console
 
