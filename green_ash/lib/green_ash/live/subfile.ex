@@ -60,7 +60,7 @@ defmodule GreenAsh.Live.Subfile do
        pagination: pagination,
        per_page: page_size(pagination),
        codes: build_codes(resource),
-       columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
+       all_columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
        arg_specs: Field.specs(resource, action),
        list_path: list_path(socket, resource, action),
        has_next: false,
@@ -82,15 +82,42 @@ defmodule GreenAsh.Live.Subfile do
   def handle_params(_params, _uri, %{assigns: %{notice: _}} = socket), do: {:noreply, socket}
 
   def handle_params(params, _uri, socket) do
+    all = socket.assigns.all_columns
+
     {:noreply,
      socket
      |> assign(
        args: filter_params(params),
-       sort: parse_sort(params["sort"], socket.assigns.columns),
+       columns: parse_columns(params["cols"], all),
+       # Against every column, not the shown ones: sorting by a column you
+       # have hidden is reasonable, and dropping the sort silently would look
+       # like the sort itself failed.
+       sort: parse_sort(params["sort"], all),
        page: parse_page(params["page"])
      )
      |> assign_filter_form()
      |> load_rows()}
+  end
+
+  # "holder,balance", in the order given. Anything the resource does not have
+  # is dropped; an empty result falls back to every column, so a stale link
+  # shows a full screen rather than a bare one.
+  defp parse_columns(nil, all), do: all
+
+  defp parse_columns(value, all) do
+    case value |> to_string() |> String.split(",", trim: true) |> known_columns(all) do
+      [] -> all
+      columns -> columns
+    end
+  end
+
+  defp known_columns(names, all) do
+    Enum.flat_map(names, fn name ->
+      case Enum.find(all, &(to_string(&1) == String.trim(name))) do
+        nil -> []
+        column -> [column]
+      end
+    end)
   end
 
   defp filter_params(%{"filter" => filter}) when is_map(filter), do: filter
@@ -127,6 +154,7 @@ defmodule GreenAsh.Live.Subfile do
     params =
       %{
         "filter" => socket.assigns.args,
+        "cols" => encode_columns(socket.assigns.columns, socket.assigns.all_columns),
         "sort" => encode_sort(socket.assigns.sort),
         "page" => encode_page(socket.assigns.page)
       }
@@ -145,6 +173,10 @@ defmodule GreenAsh.Live.Subfile do
 
   defp encode_page(0), do: nil
   defp encode_page(page), do: to_string(page + 1)
+
+  # Showing everything is the default, so it says nothing in the URL.
+  defp encode_columns(columns, all) when columns == all, do: nil
+  defp encode_columns(columns, _all), do: Enum.map_join(columns, ",", &to_string/1)
 
   defp assign_filter_form(socket),
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
@@ -337,7 +369,8 @@ defmodule GreenAsh.Live.Subfile do
     Command.apply_to(socket, cmd,
       on_debug: fn s ->
         {:noreply, assign(s, message: "Use option 5 to display a record.")}
-      end
+      end,
+      on_columns: &set_columns/2
     )
   end
 
@@ -345,6 +378,34 @@ defmodule GreenAsh.Live.Subfile do
     do: {:noreply, push_navigate(socket, to: socket.assigns.base)}
 
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
+
+  # `:cols` alone lists what is on offer, `:cols all` restores them, and any
+  # other argument list becomes the columns in the order given. Unknown names
+  # are named back rather than dropped in silence — a typo would otherwise
+  # look like the column does not exist.
+  defp set_columns([], socket) do
+    {:noreply, assign(socket, message: "Columns: " <> available(socket))}
+  end
+
+  defp set_columns(names, socket) do
+    all = socket.assigns.all_columns
+
+    case Enum.reject(names, fn n -> n in ["all"] or Enum.any?(all, &(to_string(&1) == n)) end) do
+      [] ->
+        columns = if "all" in names, do: all, else: known_columns(names, all)
+
+        {:noreply,
+         push_patch(socket, to: patch_to(socket, %{"cols" => encode_columns(columns, all)}))}
+
+      unknown ->
+        {:noreply,
+         assign(socket,
+           message: "No such column: #{Enum.join(unknown, ", ")}. Columns: " <> available(socket)
+         )}
+    end
+  end
+
+  defp available(socket), do: Enum.map_join(socket.assigns.all_columns, " ", &to_string/1)
 
   defp process([], socket), do: {:noreply, assign(socket, message: "No option entered.")}
 
@@ -443,10 +504,19 @@ defmodule GreenAsh.Live.Subfile do
 
   defp expanded?(set, row), do: MapSet.member?(set, Registry.encode_pk(row))
 
-  defp cell(row, col), do: row |> Map.get(col) |> fmt() |> truncate()
+  defp cell(row, col), do: row |> Map.get(col) |> fmt()
 
-  defp truncate(s) when byte_size(s) > 12, do: String.slice(s, 0, 11) <> "…"
-  defp truncate(s), do: s
+  # `byte_size` here but `String.slice` below used to disagree on any accented
+  # text: "Éléonore" is 8 characters and 11 bytes, so it was cut on a count it
+  # never had. Both sides now measure characters, and 24 of them rather than
+  # 12 — the old width truncated most identifiers into uselessness.
+  @max_cell 24
+
+  defp truncate(value) when is_binary(value) do
+    if String.length(value) > @max_cell,
+      do: String.slice(value, 0, @max_cell - 1) <> "…",
+      else: value
+  end
 
   defp fmt(nil), do: ""
   defp fmt(%Decimal{} = d), do: Decimal.to_string(d)
@@ -519,7 +589,9 @@ defmodule GreenAsh.Live.Subfile do
                       autocomplete="off"
                     />
                   </td>
-                  <td :for={col <- @columns}>{cell(row, col)}</td>
+                  <td :for={col <- @columns} title={cell(row, col)}>
+                    {truncate(cell(row, col))}
+                  </td>
                 </tr>
                 <tr :if={expanded?(@expanded, row)} class="exp">
                   <td></td>

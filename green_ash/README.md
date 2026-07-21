@@ -97,8 +97,11 @@ Whichever you pass, keep the route behind the dev-only guard shown under
 
 - Navigation: digits + Enter on menus, `j`/`k`/`Enter`/`Esc` in lists.
 - Vim-style `:` command line: `:list <resource>`, `:new <resource>`,
-  `:actor <resource> <id>` / `:actor none` (to exercise your policies),
-  `:whoami`, `:debug` (raw inspection), `:menu`, `:help`.
+  `:cols <field...>` (choose and order a list's columns; `:cols all` to
+  restore), `:actor <resource> <id>` / `:actor none` (to exercise your
+  policies), `:whoami`, `:debug` (raw inspection), `:menu`, `:help`.
+- A list's filter, sort, columns and page live in the URL, so a screen can be
+  bookmarked or pasted to someone else.
 
 ## Adding a resource
 

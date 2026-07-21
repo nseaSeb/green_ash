@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Columns are yours to choose.** Lists rendered every public attribute at a
+  fixed width of twelve characters, which on any real resource is a wall of
+  truncated stubs. `:cols holder balance` picks them, in the order given;
+  `:cols` alone lists what is on offer; `:cols all` restores them. The choice
+  rides in the URL like the rest of the screen, so a narrowed list can be
+  bookmarked. A name the resource does not have is named back rather than
+  dropped in silence.
+
+- **Cells are cut at 24 characters instead of 12, and the full value is kept
+  as the cell's `title`.** The cut also used to compare `byte_size` while
+  slicing by character, so accented text was measured against a length it
+  never had — "Éléonore" is 8 characters and 11 bytes.
+
 - **Filter, sort and page live in the URL.** They were socket state only: a
   reload dropped you back on an unsorted, unfiltered first page, and a screen
   could not be handed to anyone — the address bar said the same thing whatever
