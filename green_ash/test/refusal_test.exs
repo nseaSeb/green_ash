@@ -75,6 +75,19 @@ defmodule GreenAsh.RefusalTest do
 
       assert mounted.assigns.read_error =~ "anonymous"
     end
+
+    test "a stale actor and the refusal it causes are both shown" do
+      # 0.2.0 made a stored actor that fails to load say so. That reason is
+      # usually *why* the read is then refused, so the refusal must not take
+      # its place on the one status line.
+      {:ok, mounted} =
+        mount_list("secret", "read", %{actor_notice: "Actor dropped: no secret found with id 7."})
+
+      html = render_view(Subfile, mounted.assigns)
+
+      assert html =~ "Actor dropped"
+      assert html =~ "Forbidden"
+    end
   end
 
   describe "a read Ash insists on paginating" do

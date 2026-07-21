@@ -69,6 +69,14 @@ defmodule Bank.Ledger.Account do
       filter expr(is_nil(^arg(:holder)) or contains(holder, ^arg(:holder)))
     end
 
+    # Keyset-only required pagination: Ash refuses a read without page
+    # options here, and refuses offset-based ones too. Exercises the console
+    # against a pagination shape ETS is too permissive to test.
+    read :recent do
+      description "Recent accounts (keyset paging)"
+      pagination keyset?: true, offset?: false, required?: true, default_limit: 10
+    end
+
     # Business action: open an account with an initial deposit (argument).
     create :open do
       description "Open an account"

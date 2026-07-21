@@ -346,6 +346,15 @@ defmodule GreenAsh.Live.Subfile do
   defp add(list, true, item), do: list ++ [item]
   defp add(list, false, _item), do: list
 
+  # Both are shown, not one over the other. A stored actor that failed to load
+  # (`message`) is the usual reason a read is then refused (`read_error`), so
+  # hiding either leaves the other looking unexplained.
+  defp status(message, read_error) do
+    [message, read_error]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" · ")
+  end
+
   defp next_sort({field, :asc}, field), do: {field, :desc}
   defp next_sort({field, :desc}, field), do: nil
   defp next_sort(_other, field), do: {field, :asc}
@@ -473,7 +482,7 @@ defmodule GreenAsh.Live.Subfile do
 
       <div class="crt-foot">
         <div class="crt-rule"></div>
-        <div class={["crt-msg", @read_error && "crt-err"]}>{@read_error || @message}</div>
+        <div class={["crt-msg", @read_error && "crt-err"]}>{status(@message, @read_error)}</div>
         <form phx-submit="command" class="crt-cmd" autocomplete="off">
           <label>Command ===></label>
           <input type="text" name="cmd" value="" id="cmd" />

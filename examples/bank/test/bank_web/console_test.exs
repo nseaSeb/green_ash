@@ -111,4 +111,37 @@ defmodule BankWeb.ConsoleTest do
              &(&1.account_id == acc.id and Decimal.equal?(&1.amount, Decimal.new("42")))
            )
   end
+
+  describe "a read Ash insists on paginating" do
+    # `:recent` declares `keyset?: true, offset?: false, required?: true`. Ash
+    # refuses such a read without page options — the console used to reach it
+    # with a plain limit/offset and take the whole screen down. ETS is too
+    # permissive to test this; Postgres is what users run.
+    setup do
+      for n <- 1..25 do
+        open_account("H#{String.pad_leading(to_string(n), 2, "0")}", "0")
+      end
+
+      :ok
+    end
+
+    defp holders(html), do: ~r/H\d\d/ |> Regex.scan(html) |> List.flatten() |> Enum.uniq()
+
+    test "the list opens instead of crashing", %{conn: conn} do
+      assert {:ok, _view, html} = live(conn, "/cli/r/account/list/recent")
+
+      assert html =~ "LIST · Bank accounts"
+      assert length(holders(html)) == 20
+    end
+
+    test "paging walks the whole set, without gaps or repeats", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/cli/r/account/list/recent")
+      first = holders(html)
+
+      second = view |> element("button[phx-value-dir=next]") |> render_click() |> holders()
+
+      assert first -- (first -- second) == [], "a record appeared on both pages"
+      assert length(Enum.uniq(first ++ second)) == 25, "records were skipped between pages"
+    end
+  end
 end
