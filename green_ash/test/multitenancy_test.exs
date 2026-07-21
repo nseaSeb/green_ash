@@ -65,7 +65,7 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      refute Map.has_key?(mounted.assigns, :tenant_notice)
+      refute Map.has_key?(mounted.assigns, :notice)
     end
   end
 
@@ -101,9 +101,9 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      assert mounted.assigns.tenant_notice
-      assert mounted.assigns.strategy == :attribute
-      assert mounted.assigns.resource == Project
+      assert mounted.assigns.notice.kind == :tenant
+      assert mounted.assigns.notice.strategy == :attribute
+      assert mounted.assigns.notice.resource == Project
     end
 
     test "Screen.mount/3 returns a notice rather than raising" do
@@ -114,7 +114,7 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      assert mounted.assigns.tenant_notice
+      assert mounted.assigns.notice.kind == :tenant
       # Escape goes back to the menu, not to the list: the list is just as unopenable.
       assert mounted.assigns.return_to == "/cli"
     end
@@ -127,15 +127,14 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      refute Map.has_key?(mounted.assigns, :tenant_notice)
+      refute Map.has_key?(mounted.assigns, :notice)
       assert mounted.assigns.rows == []
     end
 
     test "the notice component renders" do
       html =
-        render_component(&GreenAsh.Components.tenant_notice/1,
-          resource: Project,
-          strategy: :attribute
+        render_component(&GreenAsh.Components.notice/1,
+          notice: %{kind: :tenant, resource: Project, strategy: :attribute}
         )
 
       assert html =~ "TENANT REQUIRED"
@@ -145,9 +144,8 @@ defmodule GreenAsh.MultitenancyTest do
 
     test "it offers no advice that would weaken tenant isolation" do
       html =
-        render_component(&GreenAsh.Components.tenant_notice/1,
-          resource: Project,
-          strategy: :attribute
+        render_component(&GreenAsh.Components.notice/1,
+          notice: %{kind: :tenant, resource: Project, strategy: :attribute}
         )
 
       # A debug console must not tell anyone to make a tenant-scoped resource

@@ -49,12 +49,39 @@ defmodule GreenAsh.Registry do
   def resource_by_slug(domains, slug),
     do: Enum.find(resources(domains), &(resource_slug(&1) == slug))
 
-  @doc "Action struct by name (string or atom)."
-  def action(resource, name) when is_binary(name),
-    do: action(resource, String.to_existing_atom(name))
+  @doc """
+  Action struct by name (string or atom), or nil when `resource` declares no
+  such action.
+
+  Action names arrive from the URL, so an unknown one is a routine event, not
+  a bug: `String.to_existing_atom/1` on a name no atom exists for raises, and
+  a raise inside `mount/3` is a 500 rather than a screen saying what is wrong.
+  """
+  def action(resource, name) when is_binary(name) do
+    case existing_atom(name) do
+      {:ok, atom} -> action(resource, atom)
+      :error -> nil
+    end
+  end
 
   def action(resource, name) when is_atom(name),
     do: Ash.Resource.Info.action(resource, name)
+
+  defp existing_atom(name) do
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> :error
+  end
+
+  @doc """
+  Whether `action` declares pagination.
+
+  Matters to the caller because a paginated read returns an `Ash.Page.*`
+  struct rather than a list — `length/1` on one raises. Note that Ash's
+  `defaults [:read]` declares pagination while a hand-written `read` block
+  does not, so this cannot be assumed either way.
+  """
+  def paginated?(action), do: Map.get(action, :pagination) not in [nil, false]
 
   @doc "Label of an action: its description if defined, otherwise its humanized name."
   def action_label(action) do

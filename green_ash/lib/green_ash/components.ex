@@ -69,44 +69,86 @@ defmodule GreenAsh.Components do
     """
   end
 
-  # Full screen shown in place of a resource the console cannot open yet.
+  # Full screen shown in place of a resource/action the console cannot open.
   #
-  # Used for multitenant resources: the console has no tenant to set, so any
-  # read would raise `Ash.Error.Invalid.TenantRequired`. Stating that is more
-  # useful than crashing.
+  # Every case here is one the console would otherwise crash on: a read Ash
+  # refuses without a tenant, an action name that exists in no resource, a
+  # non-read action asked to behave like a list. Saying so beats a 500, and
+  # beats bouncing to the menu with no word about why.
   #
-  # Internal: an inlined screen of the console, not a widget for hosts to
-  # reuse. Kept out of the docs so it stays free to change when tenant
-  # selection lands.
+  # Internal: inlined screens of the console, not widgets for hosts to reuse.
+  # Kept out of the docs so they stay free to change.
   @doc false
-  attr :resource, :atom, required: true
-  attr :strategy, :atom, required: true
+  attr :notice, :map, required: true
 
-  def tenant_notice(assigns) do
+  def notice(%{notice: %{kind: :tenant}} = assigns) do
+    ~H"""
+    <.notice_frame program={program(@notice.resource)} title="TENANT REQUIRED">
+      <p>
+        <b>{inspect(@notice.resource)}</b>
+        declares <b>multitenancy strategy {inspect(@notice.strategy)}</b>
+        and is not <b>global?</b>, so Ash refuses any read without a tenant.
+        The console cannot pick one for you: a tenant is application
+        knowledge, not something Ash can introspect.
+      </p>
+      <:detail>
+        Picking a tenant from the console is not supported yet, so this
+        resource cannot be browsed here for now.
+      </:detail>
+    </.notice_frame>
+    """
+  end
+
+  def notice(%{notice: %{kind: :no_action}} = assigns) do
+    ~H"""
+    <.notice_frame program={program(@notice.resource)} title="UNKNOWN ACTION">
+      <p>
+        <b>{inspect(@notice.resource)}</b> declares no action named <b>{@notice.name}</b>.
+      </p>
+      <:detail>
+        The name comes from the URL. Check it, or pick the action from the
+        resource's menu.
+      </:detail>
+    </.notice_frame>
+    """
+  end
+
+  def notice(%{notice: %{kind: :not_readable}} = assigns) do
+    ~H"""
+    <.notice_frame program={program(@notice.resource)} title="NOT A LIST">
+      <p>
+        <b>{@notice.name}</b>
+        is a <b>{@notice.type}</b>
+        action on <b>{inspect(@notice.resource)}</b>: only a <b>read</b>
+        action produces a list.
+      </p>
+      <:detail>
+        An update or destroy runs on a record — open a read action and pick
+        the row there.
+      </:detail>
+    </.notice_frame>
+    """
+  end
+
+  attr :program, :string, required: true
+  attr :title, :string, required: true
+  slot :inner_block, required: true
+  slot :detail
+
+  defp notice_frame(assigns) do
     ~H"""
     <.styles />
     <div class="crt" phx-window-keydown="keydown" phx-key="Escape">
       <div class="crt-head">
-        <span>GREEN·ASH / {@resource |> Module.split() |> List.last() |> String.upcase()}</span>
-        <span class="crt-title">TENANT REQUIRED</span>
+        <span>GREEN·ASH / {@program}</span>
+        <span class="crt-title">{@title}</span>
         <span>◆ unavailable</span>
       </div>
       <div class="crt-rule"></div>
 
       <div class="crt-body">
-        <div class="crt-confirm">
-          <p>
-            <b>{inspect(@resource)}</b>
-            declares <b>multitenancy strategy {inspect(@strategy)}</b>
-            and is not <b>global?</b>, so Ash refuses any read without a tenant.
-            The console cannot pick one for you: a tenant is application
-            knowledge, not something Ash can introspect.
-          </p>
-        </div>
-        <p class="crt-lead">
-          Picking a tenant from the console is not supported yet, so this
-          resource cannot be browsed here for now.
-        </p>
+        <div class="crt-confirm">{render_slot(@inner_block)}</div>
+        <p :for={detail <- @detail} class="crt-lead">{render_slot(detail)}</p>
       </div>
 
       <div class="crt-foot">
@@ -117,6 +159,8 @@ defmodule GreenAsh.Components do
     </div>
     """
   end
+
+  defp program(resource), do: resource |> Module.split() |> List.last() |> String.upcase()
 
   @doc "\"Terminal\"-styled button."
   attr :type, :string, default: "text"

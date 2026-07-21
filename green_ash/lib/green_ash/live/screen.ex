@@ -11,24 +11,45 @@ defmodule GreenAsh.Live.Screen do
   def mount(%{"resource" => slug} = params, _session, socket) do
     %{domains: domains, base: base, actor: actor} = socket.assigns
 
-    case Registry.resource_by_slug(domains, slug) do
-      nil ->
+    with {:ok, resource} <- fetch_resource(domains, slug),
+         :ok <- check_tenant(resource),
+         {:ok, action} <- fetch_action(resource, params["action"]) do
+      mount_action(socket, resource, action, params, actor, base)
+    else
+      :no_resource ->
         {:ok, push_navigate(socket, to: base)}
 
-      resource ->
-        if Registry.tenant_required?(resource) do
-          # Escape leads to the menu, not to the list: the list is just as
-          # unopenable, so return_to would otherwise bounce between screens.
-          {:ok, socket |> assign_tenant_notice(resource) |> assign(return_to: base)}
-        else
-          mount_action(socket, resource, params, actor, base)
-        end
+      {:notice, notice} ->
+        # Escape leads to the menu, not to the list: for a tenant-required
+        # resource the list is just as unopenable, so return_to would
+        # otherwise bounce between screens.
+        {:ok, assign(socket, notice: notice, return_to: base)}
     end
   end
 
-  defp mount_action(socket, resource, params, actor, base) do
-    action = Registry.action(resource, params["action"])
+  defp fetch_resource(domains, slug) do
+    case Registry.resource_by_slug(domains, slug) do
+      nil -> :no_resource
+      resource -> {:ok, resource}
+    end
+  end
 
+  defp check_tenant(resource) do
+    if Registry.tenant_required?(resource),
+      do: {:notice, tenant_notice(resource)},
+      else: :ok
+  end
+
+  # An action name from the URL that matches none leaves `action` nil, which
+  # `Field.specs/2` cannot take — a raise inside `mount/3`, i.e. a 500.
+  defp fetch_action(resource, name) do
+    case Registry.action(resource, name) do
+      nil -> {:notice, no_action_notice(resource, name)}
+      action -> {:ok, action}
+    end
+  end
+
+  defp mount_action(socket, resource, action, params, actor, base) do
     case load_subject(resource, params["id"], actor) do
       {:ok, subject} ->
         {:ok,
@@ -119,9 +140,9 @@ defmodule GreenAsh.Live.Screen do
   defp select_prompt(_), do: nil
 
   @impl true
-  def render(%{tenant_notice: true} = assigns) do
+  def render(%{notice: _} = assigns) do
     ~H"""
-    <.tenant_notice resource={@resource} strategy={@strategy} />
+    <.notice notice={@notice} />
     """
   end
 

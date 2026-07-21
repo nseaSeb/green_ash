@@ -11,22 +11,43 @@ defmodule GreenAsh.Live.Subfile do
 
   @impl true
   def mount(%{"resource" => slug, "action" => action_name}, _session, socket) do
-    case Registry.resource_by_slug(socket.assigns.domains, slug) do
-      nil ->
-        {:ok, push_navigate(socket, to: socket.assigns.base)}
-
-      resource ->
-        if Registry.tenant_required?(resource) do
-          {:ok, assign_tenant_notice(socket, resource)}
-        else
-          mount_rows(socket, resource, action_name)
-        end
+    with {:ok, resource} <- fetch_resource(socket, slug),
+         :ok <- check_tenant(resource),
+         {:ok, action} <- fetch_read_action(resource, action_name) do
+      mount_rows(socket, resource, action)
+    else
+      # An unknown slug is the one case with nothing to say: the URL names no
+      # resource, so there is no screen to head it with. The menu it is.
+      :no_resource -> {:ok, push_navigate(socket, to: socket.assigns.base)}
+      {:notice, notice} -> {:ok, assign(socket, notice: notice)}
     end
   end
 
-  defp mount_rows(socket, resource, action_name) do
-    action = Registry.action(resource, action_name)
+  defp fetch_resource(socket, slug) do
+    case Registry.resource_by_slug(socket.assigns.domains, slug) do
+      nil -> :no_resource
+      resource -> {:ok, resource}
+    end
+  end
 
+  defp check_tenant(resource) do
+    if Registry.tenant_required?(resource),
+      do: {:notice, tenant_notice(resource)},
+      else: :ok
+  end
+
+  # Both halves guard a raise: an action name from the URL that matches no
+  # action leaves `action` nil (which `Field.specs/2` cannot take), and a
+  # non-read action reaches `Ash.Query.for_read/4`, which rejects it.
+  defp fetch_read_action(resource, name) do
+    case Registry.action(resource, name) do
+      nil -> {:notice, no_action_notice(resource, name)}
+      %{type: :read} = action -> {:ok, action}
+      action -> {:notice, not_readable_notice(resource, action)}
+    end
+  end
+
+  defp mount_rows(socket, resource, action) do
     {:ok,
      socket
      |> assign(
@@ -41,6 +62,7 @@ defmodule GreenAsh.Live.Subfile do
        has_next: false,
        expanded: MapSet.new(),
        confirm: [],
+       read_error: nil,
        message: socket.assigns.actor_notice || ""
      )
      |> assign_filter_form()
@@ -50,19 +72,77 @@ defmodule GreenAsh.Live.Subfile do
   defp assign_filter_form(socket),
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
 
+  # A read is the console's most failure-prone call, and every failure here is
+  # a legitimate answer rather than a fault: a policy forbidding the read (the
+  # very thing this console exists to exercise), or a filter value that will
+  # not cast. `Ash.read!/2` turned both into a 500; the reason belongs on the
+  # screen instead.
   defp load_rows(socket) do
     %{resource: resource, action: action, args: args, actor: actor, page: page, sort: sort} =
       socket.assigns
 
-    fetched =
-      resource
-      |> Ash.Query.for_read(action.name, args, actor: actor)
-      |> maybe_sort(sort)
-      |> Ash.Query.limit(@per_page + 1)
-      |> Ash.Query.offset(page * @per_page)
-      |> Ash.read!(actor: actor)
+    resource
+    |> Ash.Query.for_read(action.name, args, actor: actor)
+    |> maybe_sort(sort)
+    |> read(action, actor, page)
+    |> case do
+      {:ok, rows} ->
+        assign(socket,
+          rows: Enum.take(rows, @per_page),
+          has_next: length(rows) > @per_page,
+          read_error: nil
+        )
 
-    assign(socket, rows: Enum.take(fetched, @per_page), has_next: length(fetched) > @per_page)
+      {:error, error} ->
+        assign(socket, rows: [], has_next: false, read_error: read_error_message(error, actor))
+    end
+  end
+
+  # One extra row is fetched to know whether a next page exists without
+  # counting. A paginated action must be paged through Ash's own `:page`
+  # option — it answers with an `Ash.Page.*` struct rather than a list, and
+  # refuses the read outright when its pagination is `required?`.
+  defp read(query, action, actor, page) do
+    result =
+      if Registry.paginated?(action) do
+        Ash.read(query, actor: actor, page: [limit: @per_page + 1, offset: page * @per_page])
+      else
+        query
+        |> Ash.Query.limit(@per_page + 1)
+        |> Ash.Query.offset(page * @per_page)
+        |> Ash.read(actor: actor)
+      end
+
+    case result do
+      {:ok, %{results: rows}} -> {:ok, rows}
+      {:ok, rows} when is_list(rows) -> {:ok, rows}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp read_error_message(%Ash.Error.Forbidden{}, actor) do
+    "Forbidden for #{Actor.label(actor)} — this read is denied by a policy." <>
+      if(is_nil(actor), do: " Set an actor with :actor <resource> <id>.", else: "")
+  end
+
+  defp read_error_message(error, _actor), do: "Read failed — " <> error_text(error)
+
+  # Ash errors carry a multi-line breadcrumb trail; the status line holds one
+  # line, so keep the messages and drop the trail.
+  defp error_text(error) do
+    error
+    |> Map.get(:errors, [error])
+    |> Enum.map_join(" · ", &condense/1)
+    |> String.slice(0, 240)
+  end
+
+  defp condense(error) do
+    error
+    |> Exception.message()
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == "" or &1 =~ ~r/^(Bread Crumbs:|> )/))
+    |> Enum.join(" ")
   end
 
   defp maybe_sort(query, nil), do: query
@@ -103,11 +183,18 @@ defmodule GreenAsh.Live.Subfile do
     {:noreply, socket |> update(:page, &max(&1 - 1, 0)) |> load_rows()}
   end
 
+  # The column name comes off the wire, so it is matched against the columns
+  # actually rendered rather than turned into an atom: an unknown one is
+  # ignored instead of raising.
   def handle_event("sort", %{"col" => col}, socket) do
-    field = String.to_existing_atom(col)
+    case Enum.find(socket.assigns.columns, &(to_string(&1) == col)) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply,
-     socket |> assign(sort: next_sort(socket.assigns.sort, field), page: 0) |> load_rows()}
+      field ->
+        {:noreply,
+         socket |> assign(sort: next_sort(socket.assigns.sort, field), page: 0) |> load_rows()}
+    end
   end
 
   def handle_event("process", %{"opt" => opts}, socket) do
@@ -260,9 +347,9 @@ defmodule GreenAsh.Live.Subfile do
   defp today, do: Calendar.strftime(Date.utc_today(), "%d/%m/%y")
 
   @impl true
-  def render(%{tenant_notice: true} = assigns) do
+  def render(%{notice: _} = assigns) do
     ~H"""
-    <.tenant_notice resource={@resource} strategy={@strategy} />
+    <.notice notice={@notice} />
     """
   end
 
@@ -362,7 +449,7 @@ defmodule GreenAsh.Live.Subfile do
 
       <div class="crt-foot">
         <div class="crt-rule"></div>
-        <div class="crt-msg">{@message}</div>
+        <div class={["crt-msg", @read_error && "crt-err"]}>{@read_error || @message}</div>
         <form phx-submit="command" class="crt-cmd" autocomplete="off">
           <label>Command ===></label>
           <input type="text" name="cmd" value="" id="cmd" />

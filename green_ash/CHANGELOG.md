@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.3.0 (2026-07-21)
+
+Finishes what 0.2.0 started. That release turned two crashes into explicit
+refusals (an actor that fails to load, a resource requiring a tenant); the
+same class remained on four other paths, each of them a 500 rather than a
+screen. All four are covered by tests now.
+
+### Fixed
+
+- **A read denied by a policy no longer takes the console down.** This was
+  the worst of them: the console exists to let you watch your policies decide,
+  and any read policy that refuses the current actor — `authorize_if
+  actor_present()` on a read, say — reached `Ash.read!/2` and raised inside
+  `mount/3`. Opening the list gave a LiveView error page, with nothing to say
+  which policy refused or that setting an actor would help. The refusal is now
+  shown on the status line, naming the current actor and, when there is none,
+  the `:actor` command that sets one.
+
+- **A read declaring `pagination required?: true` no longer crashes.** Ash
+  answers such a read with an `Ash.Page.Offset`/`Keyset` struct rather than a
+  list, and the console called `length/1` on it — `ArgumentError`. Paginated
+  reads are now paged through Ash's own `:page` option. Note this was not an
+  exotic case: `defaults [:read]` declares pagination, and `required?: true`
+  is common in generated resources.
+
+- **An action name that matches nothing no longer 500s.** The name comes
+  straight from the URL and was fed to `String.to_existing_atom/1`, which
+  raises when no such atom exists; when the atom happened to exist without
+  naming an action, the nil that followed broke `GreenAsh.Field.specs/2`
+  instead. Both now open a screen saying the resource declares no such action.
+
+- **A non-read action can no longer be opened as a list.** `/r/x/list/create`
+  reached `Ash.Query.for_read/4` with a create action. It now says so.
+
+- **A filter value that will not cast no longer kills the screen.** Typing
+  something an argument cannot hold (a filter on an `:integer`, say) raised
+  out of `handle_event/3`, losing the screen's state on reconnect. The cast
+  error is shown instead, and clears on the next successful read.
+
+- **The sort column is no longer converted to an atom.** It arrives from the
+  client; it is now matched against the columns actually rendered, and an
+  unknown one is ignored rather than raising.
+
+### Changed
+
+- `GreenAsh.Registry.action/2` returns `nil` for an unknown action name
+  instead of raising.
+- The internal `tenant_notice` assign is now `notice`, one shape covering
+  every screen the console refuses to open. `GreenAsh.Components.tenant_notice/1`
+  becomes `GreenAsh.Components.notice/1`, taking the notice map. Both were
+  `@doc false` internals.
+
+### Added
+
+- `GreenAsh.Registry.paginated?/1`, which tells a read that returns a page
+  from one that returns a list.
+
 ## 0.2.0 (2026-07-16)
 
 ### Fixed
