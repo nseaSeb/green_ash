@@ -48,11 +48,15 @@ defmodule GreenAsh.Live.Subfile do
   end
 
   defp mount_rows(socket, resource, action) do
+    pagination = required_pagination(action)
+
     {:ok,
      socket
      |> assign(
        resource: resource,
        action: action,
+       pagination: pagination,
+       per_page: page_size(pagination),
        codes: build_codes(resource),
        columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
        arg_specs: Field.specs(resource, action),
@@ -81,15 +85,17 @@ defmodule GreenAsh.Live.Subfile do
     %{resource: resource, action: action, args: args, actor: actor, page: page, sort: sort} =
       socket.assigns
 
+    %{pagination: pagination, per_page: per_page} = socket.assigns
+
     resource
     |> Ash.Query.for_read(action.name, args, actor: actor)
     |> maybe_sort(sort)
-    |> read(action, actor, page)
+    |> read(pagination, per_page, actor, page)
     |> case do
       {:ok, rows} ->
         assign(socket,
-          rows: Enum.take(rows, @per_page),
-          has_next: length(rows) > @per_page,
+          rows: Enum.take(rows, per_page),
+          has_next: length(rows) > per_page,
           read_error: nil
         )
 
@@ -99,17 +105,21 @@ defmodule GreenAsh.Live.Subfile do
   end
 
   # One extra row is fetched to know whether a next page exists without
-  # counting. A paginated action must be paged through Ash's own `:page`
-  # option — it answers with an `Ash.Page.*` struct rather than a list, and
-  # refuses the read outright when its pagination is `required?`.
-  defp read(query, action, actor, page) do
+  # counting.
+  #
+  # Ash's `:page` option is used only where it must be: an action whose
+  # pagination is `required?` refuses a read without it. Everywhere else plain
+  # limit/offset is kept, because `:page` brings the action's `max_page_size`
+  # with it — asking for more silently yields a short page rather than an
+  # error, which would read as "that is all there is".
+  defp read(query, pagination, per_page, actor, page) do
     result =
-      if Registry.paginated?(action) do
-        Ash.read(query, actor: actor, page: [limit: @per_page + 1, offset: page * @per_page])
+      if pagination do
+        Ash.read(query, actor: actor, page: [limit: per_page + 1, offset: page * per_page])
       else
         query
-        |> Ash.Query.limit(@per_page + 1)
-        |> Ash.Query.offset(page * @per_page)
+        |> Ash.Query.limit(per_page + 1)
+        |> Ash.Query.offset(page * per_page)
         |> Ash.read(actor: actor)
       end
 
@@ -117,6 +127,20 @@ defmodule GreenAsh.Live.Subfile do
       {:ok, %{results: rows}} -> {:ok, rows}
       {:ok, rows} when is_list(rows) -> {:ok, rows}
       {:error, error} -> {:error, error}
+    end
+  end
+
+  # The `:page` path is bounded by the action's own cap, so the console's page
+  # has to sit one row below it — otherwise the lookahead row is the one that
+  # gets cut, "next page" reads as false, and the remaining records are simply
+  # never shown.
+  defp page_size(%{max_page_size: max}) when is_integer(max), do: min(@per_page, max - 1)
+  defp page_size(_pagination), do: @per_page
+
+  defp required_pagination(action) do
+    case Registry.pagination(action) do
+      %{required?: true} = pagination -> pagination
+      _ -> nil
     end
   end
 

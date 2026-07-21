@@ -5,6 +5,7 @@ defmodule GreenAsh.TestSupport.Guarded do
   resources do
     resource GreenAsh.TestSupport.Secret
     resource GreenAsh.TestSupport.Entry
+    resource GreenAsh.TestSupport.Capped
   end
 end
 
@@ -74,6 +75,41 @@ defmodule GreenAsh.TestSupport.Entry do
     read :read do
       primary? true
       pagination offset?: true, required?: true, default_limit: 10
+    end
+  end
+end
+
+defmodule GreenAsh.TestSupport.Capped do
+  @moduledoc """
+  Required pagination with a `max_page_size` below the console's page size.
+
+  Ash caps a `:page` read at `max_page_size` and returns a short page rather
+  than an error, so a console asking for more than the cap gets fewer rows
+  than it thinks — and, if it sizes its page off its own constant, concludes
+  there is no next page. That loses records with no visible symptom.
+  """
+  use Ash.Resource,
+    domain: GreenAsh.TestSupport.Guarded,
+    data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :n, :integer, public?: true
+  end
+
+  actions do
+    create :create do
+      primary? true
+      accept [:n]
+    end
+
+    read :read do
+      primary? true
+      pagination offset?: true, required?: true, default_limit: 5, max_page_size: 10
     end
   end
 end

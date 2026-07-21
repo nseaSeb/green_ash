@@ -19,11 +19,15 @@ screen. All four are covered by tests now.
   the `:actor` command that sets one.
 
 - **A read declaring `pagination required?: true` no longer crashes.** Ash
-  answers such a read with an `Ash.Page.Offset`/`Keyset` struct rather than a
-  list, and the console called `length/1` on it — `ArgumentError`. Paginated
-  reads are now paged through Ash's own `:page` option. Note this was not an
-  exotic case: `defaults [:read]` declares pagination, and `required?: true`
-  is common in generated resources.
+  refuses such a read without page options, and answers with an
+  `Ash.Page.Offset`/`Keyset` struct rather than a list — the console called
+  `length/1` on it, an `ArgumentError`. These reads now go through Ash's own
+  `:page` option, and the console's page size is derived from the action's
+  `max_page_size` rather than from its own constant: Ash caps an oversized
+  page silently rather than erroring, so a console asking for more than the
+  cap would have shown a short page and reported no next page — losing
+  records with no visible symptom. Reads that merely *allow* pagination keep
+  the previous limit/offset path, which the cap does not apply to.
 
 - **An action name that matches nothing no longer 500s.** The name comes
   straight from the URL and was fed to `String.to_existing_atom/1`, which
@@ -54,8 +58,8 @@ screen. All four are covered by tests now.
 
 ### Added
 
-- `GreenAsh.Registry.paginated?/1`, which tells a read that returns a page
-  from one that returns a list.
+- `GreenAsh.Registry.pagination/1`, returning a read action's pagination
+  config (or nil) — `required?` is what decides how the read must be run.
 
 ## 0.2.0 (2026-07-16)
 

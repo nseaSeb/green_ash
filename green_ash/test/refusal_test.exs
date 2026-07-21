@@ -12,7 +12,7 @@ defmodule GreenAsh.RefusalTest do
 
   alias GreenAsh.Live.{Screen, Subfile}
   alias GreenAsh.Registry
-  alias GreenAsh.TestSupport.{Entry, Guarded, Secret}
+  alias GreenAsh.TestSupport.{Capped, Entry, Guarded, Secret}
 
   @domains [Guarded]
 
@@ -83,12 +83,13 @@ defmodule GreenAsh.RefusalTest do
                Entry |> Ash.Query.for_read(:read, %{}) |> Ash.read(page: [limit: 5, offset: 0])
     end
 
-    test "Registry.paginated? tells the two kinds of read apart" do
+    test "Registry.pagination tells the three kinds of read apart" do
       # `defaults [:read]` declares pagination; a hand-written `read` block
-      # does not — so this cannot be assumed either way.
-      assert Registry.paginated?(Registry.action(Entry, :read))
-      assert Registry.paginated?(Registry.action(Secret, :read))
-      refute Registry.paginated?(Registry.action(GreenAsh.TestSupport.Account, :search))
+      # does not — so neither can be assumed. Only `required?` forces the
+      # console onto Ash's `:page` option.
+      assert %{required?: true} = Registry.pagination(Registry.action(Entry, :read))
+      assert %{required?: false} = Registry.pagination(Registry.action(Secret, :read))
+      assert Registry.pagination(Registry.action(GreenAsh.TestSupport.Account, :search)) == nil
     end
 
     test "the console lists it rather than raising on length/1" do
@@ -112,6 +113,44 @@ defmodule GreenAsh.RefusalTest do
       {:noreply, next} = Subfile.handle_event("page", %{"dir" => "next"}, mounted)
       assert length(next.assigns.rows) == 1
       refute next.assigns.has_next
+    end
+
+    test "an action capping pages below the console's page size loses no record" do
+      # Ash answers a `:page` read above `max_page_size` with a short page, not
+      # an error. Sizing the console's page off its own constant would show 11
+      # of these 25 and report no next page — records gone, nothing to see.
+      for n <- 1..25, do: Ash.create!(Capped, %{n: n})
+
+      seen = walk_pages("capped", "read")
+
+      assert Enum.sort(seen) == Enum.to_list(1..25)
+    end
+
+    test "the page size is derived from the action's cap, not from the console" do
+      {:ok, mounted} = mount_list("capped", "read")
+
+      # max_page_size 10, minus the row fetched to look ahead.
+      assert mounted.assigns.per_page == 9
+      # An uncapped action keeps the console's own size.
+      {:ok, plain} = mount_list("entry", "read")
+      assert plain.assigns.per_page == 20
+    end
+
+    # Walks "Next" to exhaustion, collecting every row the console shows.
+    defp walk_pages(slug, action) do
+      {:ok, socket} = mount_list(slug, action)
+      collect(socket, [])
+    end
+
+    defp collect(socket, acc) do
+      acc = acc ++ Enum.map(socket.assigns.rows, & &1.n)
+
+      if socket.assigns.has_next do
+        {:noreply, next} = Subfile.handle_event("page", %{"dir" => "next"}, socket)
+        collect(next, acc)
+      else
+        acc
+      end
     end
   end
 

@@ -74,14 +74,22 @@ defmodule GreenAsh.Registry do
   end
 
   @doc """
-  Whether `action` declares pagination.
+  Pagination declared by a read action, or nil.
 
-  Matters to the caller because a paginated read returns an `Ash.Page.*`
-  struct rather than a list — `length/1` on one raises. Note that Ash's
-  `defaults [:read]` declares pagination while a hand-written `read` block
-  does not, so this cannot be assumed either way.
+  Only `required?` pagination changes how a caller must read: Ash then
+  refuses a read carrying no page options, and answers with an `Ash.Page.*`
+  struct rather than a list — `length/1` on one raises. A read that merely
+  *allows* pagination is still read with plain limit/offset.
+
+  Note that Ash's `defaults [:read]` declares pagination while a hand-written
+  `read` block does not, so neither can be assumed.
   """
-  def paginated?(action), do: Map.get(action, :pagination) not in [nil, false]
+  def pagination(action) do
+    case Map.get(action, :pagination) do
+      %{} = pagination -> pagination
+      _ -> nil
+    end
+  end
 
   @doc "Label of an action: its description if defined, otherwise its humanized name."
   def action_label(action) do
