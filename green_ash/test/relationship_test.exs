@@ -21,7 +21,14 @@ defmodule GreenAsh.RelationshipTest do
     %Phoenix.LiveView.Socket{
       assigns:
         Map.merge(
-          %{__changed__: %{}, domains: [Shelf], base: "/cli", actor: nil, actor_notice: nil},
+          %{
+            __changed__: %{},
+            domains: [Shelf],
+            base: "/cli",
+            tenant: nil,
+            actor: nil,
+            actor_notice: nil
+          },
           assigns
         )
     }

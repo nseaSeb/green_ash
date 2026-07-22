@@ -14,6 +14,7 @@ defmodule GreenAsh.Web do
       import GreenAsh.Web,
         only: [
           ga_path: 2,
+          tenant_suffix: 1,
           tenant_notice: 1,
           no_action_notice: 2,
           not_readable_notice: 2
@@ -26,6 +27,13 @@ defmodule GreenAsh.Web do
 
   @doc "Builds an absolute path from the mount base (e.g. \"/cli\")."
   def ga_path(base, rest), do: base <> rest
+
+  # Header fragment for the current tenant. Every screen shows it, because a
+  # tenant silently decides which rows exist at all: a list that looks empty
+  # and a list scoped to the wrong tenant are indistinguishable without it.
+  @doc false
+  def tenant_suffix(nil), do: ""
+  def tenant_suffix(tenant), do: " · " <> GreenAsh.Tenant.label(tenant)
 
   # Descriptions of what the console is refusing to open, assigned as
   # `:notice` and rendered by `Components.notice/1`. Shared by Screen and

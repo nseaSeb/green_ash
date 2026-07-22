@@ -20,6 +20,7 @@ defmodule GreenAsh.ColumnsTest do
         __changed__: %{},
         domains: @domains,
         base: "/cli",
+        tenant: nil,
         actor: nil,
         actor_notice: nil
       }

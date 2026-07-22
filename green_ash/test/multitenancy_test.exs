@@ -12,7 +12,14 @@ defmodule GreenAsh.MultitenancyTest do
     %Phoenix.LiveView.Socket{
       assigns:
         Map.merge(
-          %{__changed__: %{}, domains: @domains, base: "/cli", actor: nil, actor_notice: nil},
+          %{
+            __changed__: %{},
+            domains: @domains,
+            base: "/cli",
+            tenant: nil,
+            actor: nil,
+            actor_notice: nil
+          },
           assigns
         )
     }
@@ -154,9 +161,10 @@ defmodule GreenAsh.MultitenancyTest do
         )
 
       # A debug console must not tell anyone to make a tenant-scoped resource
-      # global? to read it: that disables tenant enforcement app-wide.
+      # global? to read it: that disables tenant enforcement app-wide. The way
+      # out it does offer is the one that keeps isolation intact.
       refute html =~ "global? true"
-      assert html =~ "not supported yet"
+      assert html =~ ":tenant"
     end
 
     test "Subfile's own render clause reaches the notice, not just its assigns" do

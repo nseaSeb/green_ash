@@ -20,7 +20,14 @@ defmodule GreenAsh.RefusalTest do
     %Phoenix.LiveView.Socket{
       assigns:
         Map.merge(
-          %{__changed__: %{}, domains: @domains, base: "/cli", actor: nil, actor_notice: nil},
+          %{
+            __changed__: %{},
+            domains: @domains,
+            base: "/cli",
+            tenant: nil,
+            actor: nil,
+            actor_notice: nil
+          },
           assigns
         )
     }

@@ -8,9 +8,9 @@ defmodule GreenAsh.Command do
   `{:message, text}`, `{:columns, names}`, `:toggle_debug`, `:whoami`,
   `:noop`, `:not_command`.
   """
-  alias GreenAsh.{Actor, Registry}
+  alias GreenAsh.{Actor, Registry, Tenant}
 
-  @help "Commands: :menu  :list <r>  :new <r>  :cols <f...>  :actor <r> <id>  :actor none  :whoami  :debug  :help  :q"
+  @help "Commands: :menu  :list <r>  :new <r>  :cols <f...>  :actor <r> <id>  :tenant <v>  :whoami  :debug  :help  :q"
 
   def help, do: @help
 
@@ -39,12 +39,7 @@ defmodule GreenAsh.Command do
         {:noreply, Phoenix.Component.assign(socket, :message, msg)}
 
       :whoami ->
-        {:noreply,
-         Phoenix.Component.assign(
-           socket,
-           :message,
-           "Actor: " <> Actor.label(socket.assigns.actor)
-         )}
+        {:noreply, Phoenix.Component.assign(socket, :message, whoami(socket.assigns))}
 
       {:columns, names} ->
         on_columns.(names, socket)
@@ -57,6 +52,15 @@ defmodule GreenAsh.Command do
 
       :not_command ->
         on_other.(input, socket)
+    end
+  end
+
+  # The tenant decides which rows exist at all, so it belongs beside the actor
+  # whenever you ask who you are.
+  defp whoami(%{actor: actor} = assigns) do
+    case Tenant.label(Map.get(assigns, :tenant)) do
+      nil -> "Actor: " <> Actor.label(actor)
+      tenant -> "Actor: " <> Actor.label(actor) <> " · " <> tenant
     end
   end
 
@@ -94,6 +98,17 @@ defmodule GreenAsh.Command do
   # Column choice belongs to whichever list screen is open, so the command only
   # carries the names; the screen validates them against what it renders.
   defp command(c, args, _base, _domains) when c in ~w(cols columns), do: {:columns, args}
+
+  defp command("tenant", args, base, _) when args in [[], ["none"]],
+    do: {:redirect, "#{base}/tenant?return=#{URI.encode_www_form(base)}"}
+
+  defp command("tenant", [value], base, _),
+    do:
+      {:redirect,
+       "#{base}/tenant?value=#{URI.encode_www_form(value)}&return=#{URI.encode_www_form(base)}"}
+
+  defp command("tenant", _, _, _),
+    do: {:message, "Usage: :tenant <value>  |  :tenant none"}
 
   defp command("actor", ["none"], base, _),
     do: {:redirect, "#{base}/actor?return=#{URI.encode_www_form(base)}"}

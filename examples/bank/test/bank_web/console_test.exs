@@ -130,7 +130,16 @@ defmodule BankWeb.ConsoleTest do
       :ok
     end
 
-    defp holders(html), do: ~r/H\d\d/ |> Regex.scan(html) |> List.flatten() |> Enum.uniq()
+    # Anchored to the cell, not scanned over the whole page: LiveView's session
+    # token is random base64 in the markup, and it occasionally contains
+    # something matching a bare /H\d\d/. That made this test fail on roughly
+    # one seed in twenty, for a reason that had nothing to do with paging.
+    defp holders(html) do
+      ~r|<td[^>]*>\s*(H\d\d)\s*</td>|
+      |> Regex.scan(html)
+      |> Enum.map(&List.last/1)
+      |> Enum.uniq()
+    end
 
     test "the list opens instead of crashing", %{conn: conn} do
       assert {:ok, _view, html} = live(conn, "/cli/r/account/list/recent")
@@ -160,9 +169,20 @@ defmodule BankWeb.ConsoleTest do
       {:ok, _view, html} =
         live(conn, "/cli/r/account/list/search?filter[holder]=H2&sort=balance:desc&page=1")
 
-      # H2, H20..H25 sorted by balance desc: H25 first.
-      assert html =~ "H25"
-      refute html =~ "H19"
+      # H2, H20..H25 sorted by balance desc. Read from the cells rather than
+      # the whole page: the session token is random markup that can contain
+      # anything.
+      shown = cells(html)
+
+      assert "H25" in shown
+      refute "H19" in shown
+    end
+
+    defp cells(html) do
+      ~r|<td[^>]*>\s*(H\d\d)\s*</td>|
+      |> Regex.scan(html)
+      |> Enum.map(&List.last/1)
+      |> Enum.uniq()
     end
 
     test "clicking a column header puts the sort in the address bar", %{conn: conn} do
@@ -181,6 +201,41 @@ defmodule BankWeb.ConsoleTest do
 
       view |> element("button[phx-value-dir=prev]") |> render_click()
       assert_patched(view, "/cli/r/account/list/read")
+    end
+  end
+
+  describe "the tenant round trip" do
+    # No multitenant resource here — the library tests cover what a tenant
+    # does to a read. What only the host can prove is the wiring: a LiveView
+    # cannot write the session through its socket, so :tenant leaves the
+    # console, lands on a real route, and comes back.
+    test "the :tenant command sets it in the session and returns to the console",
+         %{conn: conn} do
+      conn = get(conn, "/cli/tenant", %{"value" => "acme", "return" => "/cli"})
+
+      assert redirected_to(conn) == "/cli"
+      assert get_session(conn, "green_ash_tenant") == "acme"
+    end
+
+    test "the console then shows it on every screen", %{conn: conn} do
+      open_account("Alice", "1")
+
+      conn = Plug.Test.init_test_session(conn, %{"green_ash_tenant" => "acme"})
+
+      {:ok, _view, menu} = live(conn, "/cli")
+      assert menu =~ "tenant:acme"
+
+      {:ok, _view, list} = live(conn, "/cli/r/account/list/read")
+      assert list =~ "tenant:acme"
+    end
+
+    test "clearing it removes it from the session", %{conn: conn} do
+      conn =
+        conn
+        |> Plug.Test.init_test_session(%{"green_ash_tenant" => "acme"})
+        |> get("/cli/tenant", %{"return" => "/cli"})
+
+      assert get_session(conn, "green_ash_tenant") == nil
     end
   end
 end

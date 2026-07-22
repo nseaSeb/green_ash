@@ -1,7 +1,7 @@
 defmodule GreenAsh.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.4.0"
   # Monorepo: the root repository also contains the examples (bank/, library/),
   # so we point precisely at the lib's subdirectory.
   @source_url "https://github.com/nseaSeb/green_ash/tree/main/green_ash"
@@ -68,12 +68,18 @@ defmodule GreenAsh.MixProject do
       source_url_pattern:
         "https://github.com/nseaSeb/green_ash/blob/main/green_ash/%{path}#L%{line}",
       groups_for_modules: [
-        Core: [GreenAsh.Registry, GreenAsh.Field, GreenAsh.Actor, GreenAsh.Command],
+        Core: [
+          GreenAsh.Registry,
+          GreenAsh.Field,
+          GreenAsh.Actor,
+          GreenAsh.Tenant,
+          GreenAsh.Command
+        ],
         "Web Integration": [
           GreenAsh.Router,
           GreenAsh.Web,
           GreenAsh.OnMount,
-          GreenAsh.ActorController,
+          GreenAsh.SessionController,
           GreenAsh.Components
         ],
         LiveViews: [GreenAsh.Live.Menu, GreenAsh.Live.Screen, GreenAsh.Live.Subfile],

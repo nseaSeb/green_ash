@@ -61,18 +61,18 @@ defmodule GreenAsh.Field do
   not perform. Better a box you can paste an id into than an empty select
   that looks like the table is empty.
   """
-  def with_options(specs, actor) do
+  def with_options(specs, actor, tenant \\ nil) do
     Enum.map(specs, fn
       %{relationship: relationship} = spec when not is_nil(relationship) ->
-        load_options(spec, relationship, actor)
+        load_options(spec, relationship, actor, tenant)
 
       spec ->
         spec
     end)
   end
 
-  defp load_options(spec, relationship, actor) do
-    case read_related(relationship.destination, actor) do
+  defp load_options(spec, relationship, actor, tenant) do
+    case read_related(relationship.destination, actor, tenant) do
       {:ok, records} ->
         %{spec | input_type: "select", options: Enum.map(records, &option/1)}
 
@@ -81,13 +81,13 @@ defmodule GreenAsh.Field do
     end
   end
 
-  defp read_related(destination, actor) do
-    if Registry.tenant_required?(destination) do
+  defp read_related(destination, actor, tenant) do
+    if Registry.tenant_required?(destination) and is_nil(tenant) do
       :error
     else
       destination
       |> Ash.Query.limit(@max_options + 1)
-      |> Ash.read(actor: actor)
+      |> Ash.read(actor: actor, tenant: tenant)
       |> case do
         {:ok, records} when length(records) <= @max_options -> {:ok, records}
         _too_many_or_refused -> :error

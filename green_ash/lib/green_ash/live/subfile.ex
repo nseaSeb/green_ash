@@ -12,7 +12,7 @@ defmodule GreenAsh.Live.Subfile do
   @impl true
   def mount(%{"resource" => slug, "action" => action_name}, _session, socket) do
     with {:ok, resource} <- fetch_resource(socket, slug),
-         :ok <- check_tenant(resource),
+         :ok <- check_tenant(resource, socket.assigns.tenant),
          {:ok, action} <- fetch_read_action(resource, action_name) do
       mount_rows(socket, resource, action)
     else
@@ -30,8 +30,10 @@ defmodule GreenAsh.Live.Subfile do
     end
   end
 
-  defp check_tenant(resource) do
-    if Registry.tenant_required?(resource),
+  # Only a refusal while no tenant is set: with one, the resource reads like
+  # any other.
+  defp check_tenant(resource, tenant) do
+    if Registry.tenant_required?(resource) and is_nil(tenant),
       do: {:notice, tenant_notice(resource)},
       else: :ok
   end
@@ -190,13 +192,13 @@ defmodule GreenAsh.Live.Subfile do
     %{resource: resource, action: action, args: args, actor: actor, page: page, sort: sort} =
       socket.assigns
 
-    %{pagination: pagination, per_page: per_page} = socket.assigns
+    %{pagination: pagination, per_page: per_page, tenant: tenant} = socket.assigns
 
     resource
-    |> Ash.Query.for_read(action.name, args, actor: actor)
+    |> Ash.Query.for_read(action.name, args, actor: actor, tenant: tenant)
     |> maybe_sort(sort)
     |> stable_sort(resource)
-    |> read(pagination, per_page, actor, page)
+    |> read(pagination, per_page, actor, tenant, page)
     |> case do
       {:ok, rows} ->
         assign(socket,
@@ -218,15 +220,19 @@ defmodule GreenAsh.Live.Subfile do
   # limit/offset is kept, because `:page` brings the action's `max_page_size`
   # with it — asking for more silently yields a short page rather than an
   # error, which would read as "that is all there is".
-  defp read(query, pagination, per_page, actor, page) do
+  defp read(query, pagination, per_page, actor, tenant, page) do
     result =
       if pagination do
-        Ash.read(query, actor: actor, page: [limit: per_page + 1, offset: page * per_page])
+        Ash.read(query,
+          actor: actor,
+          tenant: tenant,
+          page: [limit: per_page + 1, offset: page * per_page]
+        )
       else
         query
         |> Ash.Query.limit(per_page + 1)
         |> Ash.Query.offset(page * per_page)
-        |> Ash.read(actor: actor)
+        |> Ash.read(actor: actor, tenant: tenant)
       end
 
     case result do
@@ -361,11 +367,11 @@ defmodule GreenAsh.Live.Subfile do
   def handle_event("process", _params, socket), do: {:noreply, socket}
 
   def handle_event("destroy-confirm", _params, socket) do
-    actor = socket.assigns.actor
+    %{actor: actor, tenant: tenant} = socket.assigns
 
     results =
       Enum.map(socket.assigns.confirm, fn {record, action} ->
-        case Ash.destroy(record, action: action, actor: actor) do
+        case Ash.destroy(record, action: action, actor: actor, tenant: tenant) do
           :ok -> :ok
           {:error, %Ash.Error.Forbidden{}} -> :forbidden
           _ -> :error
@@ -554,7 +560,7 @@ defmodule GreenAsh.Live.Subfile do
       <div class="crt-head">
         <span>GREEN·ASH / {String.upcase(Registry.resource_label(@resource))}</span>
         <span class="crt-title">LIST · {Registry.resource_title(@resource)}</span>
-        <span>◆ {Actor.label(@actor)} · {today()}</span>
+        <span>◆ {Actor.label(@actor)}{tenant_suffix(@tenant)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 

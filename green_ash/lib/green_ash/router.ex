@@ -58,7 +58,8 @@ defmodule GreenAsh.Router do
         end
 
       scope path, alias: false, as: false do
-        get "/actor", GreenAsh.ActorController, :set
+        get "/actor", GreenAsh.SessionController, :actor
+        get "/tenant", GreenAsh.SessionController, :tenant
 
         live_session :green_ash,
           session: %{

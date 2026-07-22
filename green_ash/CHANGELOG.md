@@ -1,8 +1,22 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-07-22)
 
 ### Added
+
+- **A tenant can be chosen: `:tenant <value>`.** 0.2.0 stopped multitenant
+  resources crashing the console by refusing to open them — Ash can say a
+  resource needs a tenant, never which one you mean. Asking is the missing
+  half. With one set, every read, write, policy check and relationship picker
+  runs inside it, and the tenant shows in the header of every screen: a list
+  scoped to the wrong tenant and an empty one are otherwise indistinguishable.
+  `:tenant none` clears it, `:whoami` reports it beside the actor. Without one
+  the refusal stands exactly as before, but now names the way out. A
+  tenant-scoped record can also be used as the actor once a tenant is set.
+
+  The value is not validated. Ash accepts any term as a tenant, and a console
+  whose job is to probe your resources has no business deciding which tenants
+  are real.
 
 - **A `belongs_to` is a choice now, not a UUID you paste.** The action screen
   rendered a foreign key as what it is underneath — a box wanting a raw id —
@@ -17,6 +31,16 @@
   would read as "there are none". Introspection alone cannot know any of
   this, so the read is a separate step (`GreenAsh.Field.with_options/2`);
   `specs/2` still touches no data.
+
+### Changed
+
+- `GreenAsh.ActorController` becomes `GreenAsh.SessionController`, with an
+  `actor` and a `tenant` action — it writes both, and a name saying "actor"
+  while handling tenants would be a lie. The route it serves moves with it;
+  the router macro is unchanged for hosts.
+- `GreenAsh.Actor.resolve/2` and `from_session/2` take an optional tenant as a
+  third argument.
+- `GreenAsh.Field.with_options/2` takes an optional tenant as a third argument.
 
 ### Fixed
 

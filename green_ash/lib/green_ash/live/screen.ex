@@ -9,10 +9,10 @@ defmodule GreenAsh.Live.Screen do
 
   @impl true
   def mount(%{"resource" => slug} = params, _session, socket) do
-    %{domains: domains, base: base, actor: actor} = socket.assigns
+    %{domains: domains, base: base, actor: actor, tenant: tenant} = socket.assigns
 
     with {:ok, resource} <- fetch_resource(domains, slug),
-         :ok <- check_tenant(resource),
+         :ok <- check_tenant(resource, tenant),
          {:ok, action} <- fetch_action(resource, params["action"]) do
       mount_action(socket, resource, action, params, actor, base)
     else
@@ -34,8 +34,10 @@ defmodule GreenAsh.Live.Screen do
     end
   end
 
-  defp check_tenant(resource) do
-    if Registry.tenant_required?(resource),
+  # Only a refusal while no tenant is set: with one, the resource behaves like
+  # any other.
+  defp check_tenant(resource, tenant) do
+    if Registry.tenant_required?(resource) and is_nil(tenant),
       do: {:notice, tenant_notice(resource)},
       else: :ok
   end
@@ -50,7 +52,9 @@ defmodule GreenAsh.Live.Screen do
   end
 
   defp mount_action(socket, resource, action, params, actor, base) do
-    case load_subject(resource, params["id"], actor) do
+    tenant = socket.assigns.tenant
+
+    case load_subject(resource, params["id"], actor, tenant) do
       {:ok, subject} ->
         {:ok,
          socket
@@ -58,24 +62,24 @@ defmodule GreenAsh.Live.Screen do
            resource: resource,
            action: action,
            subject: subject,
-           specs: resource |> Field.specs(action) |> Field.with_options(actor),
+           specs: resource |> Field.specs(action) |> Field.with_options(actor, tenant),
            result: nil,
            debug: false,
            message: socket.assigns.actor_notice || "",
            return_to: return_to(resource, base, socket.assigns.domains)
          )
-         |> assign(form: fresh_form(subject, action, actor))}
+         |> assign(form: fresh_form(subject, action, actor, tenant))}
 
       :error ->
         {:ok, push_navigate(socket, to: return_to(resource, base, socket.assigns.domains))}
     end
   end
 
-  defp load_subject(resource, nil, _actor), do: {:ok, resource}
+  defp load_subject(resource, nil, _actor, _tenant), do: {:ok, resource}
 
-  defp load_subject(resource, token, actor) do
+  defp load_subject(resource, token, actor, tenant) do
     with {:ok, id} <- Registry.decode_pk(resource, token),
-         {:ok, record} <- Ash.get(resource, id, actor: actor) do
+         {:ok, record} <- Ash.get(resource, id, actor: actor, tenant: tenant) do
       {:ok, record}
     else
       _ -> :error
@@ -103,7 +107,13 @@ defmodule GreenAsh.Live.Screen do
            socket
            |> assign(result: {:ok, result})
            |> assign(
-             form: fresh_form(socket.assigns.subject, socket.assigns.action, socket.assigns.actor)
+             form:
+               fresh_form(
+                 socket.assigns.subject,
+                 socket.assigns.action,
+                 socket.assigns.actor,
+                 socket.assigns.tenant
+               )
            )}
         else
           {:noreply, push_navigate(socket, to: socket.assigns.return_to)}
@@ -129,8 +139,8 @@ defmodule GreenAsh.Live.Screen do
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
 
   # subject = the resource (create) or the loaded record (update/destroy).
-  defp fresh_form(subject, action, actor) do
-    subject |> AshPhoenix.Form.for_action(action.name, actor: actor) |> to_form()
+  defp fresh_form(subject, action, actor, tenant) do
+    subject |> AshPhoenix.Form.for_action(action.name, actor: actor, tenant: tenant) |> to_form()
   end
 
   defp ash_form(%Phoenix.HTML.Form{source: %AshPhoenix.Form{} = f}), do: f
@@ -153,7 +163,7 @@ defmodule GreenAsh.Live.Screen do
       <div class="crt-head">
         <span>GREEN·ASH / {String.upcase(short(@resource))}</span>
         <span class="crt-title">{Registry.action_label(@action)}</span>
-        <span>◆ {Actor.label(@actor)} · {@action.name} · {@action.type}</span>
+        <span>◆ {Actor.label(@actor)}{tenant_suffix(@tenant)} · {@action.name} · {@action.type}</span>
       </div>
       <div class="crt-rule"></div>
 

@@ -92,8 +92,10 @@ defmodule GreenAsh.Components do
         knowledge, not something Ash can introspect.
       </p>
       <:detail>
-        Picking a tenant from the console is not supported yet, so this
-        resource cannot be browsed here for now.
+        Set one with <b>:tenant &lt;value&gt;</b>
+        and open this resource again — every read, write and policy check will
+        then run inside that tenant. <b>:tenant none</b>
+        clears it.
       </:detail>
     </.notice_frame>
     """

@@ -43,7 +43,7 @@ If you'd rather not use Igniter, or want to see exactly what the installer does:
 1. Add the dependency in `mix.exs`:
 
    ```elixir
-   {:green_ash, "~> 0.3"}
+   {:green_ash, "~> 0.4"}
    ```
 
 2. Mount the console in your router, inside a scope going through the
@@ -99,7 +99,8 @@ Whichever you pass, keep the route behind the dev-only guard shown under
 - Vim-style `:` command line: `:list <resource>`, `:new <resource>`,
   `:cols <field...>` (choose and order a list's columns; `:cols all` to
   restore), `:actor <resource> <id>` / `:actor none` (to exercise your
-  policies), `:whoami`, `:debug` (raw inspection), `:menu`, `:help`.
+  policies), `:tenant <value>` / `:tenant none` (to browse multitenant
+  resources), `:whoami`, `:debug` (raw inspection), `:menu`, `:help`.
 - A list's filter, sort, columns and page live in the URL, so a screen can be
   bookmarked or pasted to someone else.
 
