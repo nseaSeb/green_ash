@@ -135,7 +135,12 @@ echo "--- ash_domains après patch ---"; grep -n "ash_domains" config/config.exs
 
 echo "### 5. Router : le domaine Demo.Catalog doit apparaître dans le montage green_ash"
 grep -n "green_ash" lib/demo_web/router.ex
-if ! grep -q "green_ash(\"/cli\"" lib/demo_web/router.ex; then
+# Avec ou sans parenthèses : depuis la 0.3.1 le paquet exporte
+# `locals_without_parens`, donc le formateur de l'hôte laisse `green_ash "/cli"`
+# tel quel au lieu de le réécrire. Cette assertion cherchait la forme
+# parenthésée — c'est-à-dire qu'elle exigeait le symptôme du défaut corrigé,
+# et elle a échoué sur un router parfaitement monté.
+if ! grep -qE 'green_ash[( ]"/cli"' lib/demo_web/router.ex; then
   echo "ÉCHEC: la route /cli n'a pas été montée par l'installeur"
   exit 1
 fi
