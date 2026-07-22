@@ -41,13 +41,25 @@ done
 echo "=============================================="
 echo " Couche 2 — répétition d'installation fidèle (source: ${GREEN_ASH_SOURCE:-local})"
 echo "=============================================="
-if docker compose -f docker/verify/docker-compose.rehearsal.yml run --build --rm rehearsal; then
+# Projet Compose propre à cette exécution. Sans ça, deux répétitions lancées en
+# parallèle partagent le même Postgres : la seconde trouve les tables créées par
+# la première ("relation widgets already exists"), et le `down -v` de celle qui
+# finit d'abord arrache la base de l'autre en pleine migration. Les deux
+# échouent, aucune pour une raison qui concerne le code testé.
+REHEARSAL_PROJECT="green_ash_rehearsal_$$"
+COMPOSE=(docker compose -p "${REHEARSAL_PROJECT}" -f docker/verify/docker-compose.rehearsal.yml)
+
+# Et on nettoie AVANT aussi : une exécution interrompue (Ctrl-C, plantage) laisse
+# son volume derrière elle, et la suivante hérite d'une base déjà migrée.
+"${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
+
+if "${COMPOSE[@]}" run --build --rm rehearsal; then
   echo "OK   rehearsal"
 else
   echo "ÉCHEC rehearsal"
   FAILED+=("rehearsal")
 fi
-docker compose -f docker/verify/docker-compose.rehearsal.yml down -v 2>/dev/null || true
+"${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
 
 echo "=============================================="
 if [ ${#FAILED[@]} -eq 0 ]; then
