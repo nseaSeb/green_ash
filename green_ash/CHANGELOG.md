@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.4.0 (2026-07-22)
+## 0.3.0 (2026-07-22)
+
+Takes over from 0.2.0 on both fronts it left open.
+
+0.2.0 turned two crashes into explicit refusals (an actor that fails to load,
+a resource requiring a tenant). The same class remained on six other paths,
+each of them a 500 rather than a screen, and a seventh bug did the opposite —
+it answered confidently with the wrong resource. All are fixed and covered by
+tests.
+
+It also said picking a tenant was "not supported yet". It is now, along with
+the three other things a console like this is asked for daily: relationship
+fields you pick from instead of pasting a UUID into, columns you choose, and
+screens that live in the URL so they can be bookmarked or sent to someone.
 
 ### Added
 
@@ -35,6 +48,9 @@
   this, so the read is a separate step (`GreenAsh.Field.with_options/2`);
   `specs/2` still touches no data.
 
+- `GreenAsh.Registry.pagination/1`, returning a read action's pagination
+  config (or nil) — `required?` is what decides how the read must be run.
+
 ### Changed
 
 - `GreenAsh.ActorController` becomes `GreenAsh.SessionController`, with an
@@ -44,6 +60,16 @@
 - `GreenAsh.Actor.resolve/2` and `from_session/2` take an optional tenant as a
   third argument.
 - `GreenAsh.Field.with_options/2` takes an optional tenant as a third argument.
+
+- `GreenAsh.Registry.action/2` returns `nil` for an unknown action name
+  instead of raising.
+- `GreenAsh.Registry.resource_slug/2` replaces the former one-argument version,
+  taking the exposed domains: a slug cannot be known to be unambiguous without
+  them.
+- The internal `tenant_notice` assign is now `notice`, one shape covering
+  every screen the console refuses to open. `Components.tenant_notice/1`
+  becomes `Components.notice/1`, taking the notice map. Both were
+  `@doc false` internals.
 
 ### Fixed
 
@@ -103,16 +129,6 @@
   dropped, not obeyed. The first page is left out of the URL rather than
   spelled out.
 
-## 0.3.0 (2026-07-21)
-
-Finishes what 0.2.0 started. That release turned two crashes into explicit
-refusals (an actor that fails to load, a resource requiring a tenant); the
-same class remained on six other paths, each of them a 500 rather than a
-screen. A seventh bug did the opposite — it answered confidently with the
-wrong resource. All are covered by tests now.
-
-### Fixed
-
 - **A read denied by a policy no longer takes the console down.** This was
   the worst of them: the console exists to let you watch your policies decide,
   and any read policy that refuses the current actor — `authorize_if
@@ -160,23 +176,6 @@ wrong resource. All are covered by tests now.
   another. Colliding resources now take a domain-qualified slug
   (`"bank_account"`). Slugs are unchanged wherever nothing collides, so
   existing URLs stay put.
-
-### Changed
-
-- `GreenAsh.Registry.action/2` returns `nil` for an unknown action name
-  instead of raising.
-- `GreenAsh.Registry.resource_slug/2` replaces the former one-argument version,
-  taking the exposed domains: a slug cannot be known to be unambiguous without
-  them.
-- The internal `tenant_notice` assign is now `notice`, one shape covering
-  every screen the console refuses to open. `Components.tenant_notice/1`
-  becomes `Components.notice/1`, taking the notice map. Both were
-  `@doc false` internals.
-
-### Added
-
-- `GreenAsh.Registry.pagination/1`, returning a read action's pagination
-  config (or nil) — `required?` is what decides how the read must be run.
 
 ## 0.2.0 (2026-07-16)
 
