@@ -10,7 +10,9 @@
   half. With one set, every read, write, policy check and relationship picker
   runs inside it, and the tenant shows in the header of every screen: a list
   scoped to the wrong tenant and an empty one are otherwise indistinguishable.
-  `:tenant none` clears it, `:whoami` reports it beside the actor. Without one
+  `:tenant none` clears it; bare `:tenant`, like bare `:cols`, reports rather
+  than clearing — checking which tenant you are in must not be the same
+  keystroke as leaving it. `:whoami` reports it beside the actor. Without one
   the refusal stands exactly as before, but now names the way out. A
   tenant-scoped record can also be used as the actor once a tenant is set.
 
@@ -44,6 +46,13 @@
 - `GreenAsh.Field.with_options/2` takes an optional tenant as a third argument.
 
 ### Fixed
+
+- **A pending deletion could fire on a record you could no longer see.**
+  Marking a row for deletion put a confirmation banner up; filtering, sorting,
+  paging or hiding a column then replaced the rows underneath it while the
+  banner stayed, still holding the original record. Confirming deleted that
+  one. The pending deletion is now dropped whenever the rows change, since it
+  was only ever a claim about the rows on screen.
 
 - **Paging an unordered read could repeat a record on two pages, or show it on
   neither.** Nothing obliges a data layer to return rows in the same order

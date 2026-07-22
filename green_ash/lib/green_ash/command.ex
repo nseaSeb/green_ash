@@ -99,7 +99,12 @@ defmodule GreenAsh.Command do
   # carries the names; the screen validates them against what it renders.
   defp command(c, args, _base, _domains) when c in ~w(cols columns), do: {:columns, args}
 
-  defp command("tenant", args, base, _) when args in [[], ["none"]],
+  # Bare `:tenant` reports rather than clears. Clearing is destructive — every
+  # multitenant screen closes behind it — and `:cols` alone already means
+  # "tell me", so the same keystroke must not mean "undo" here.
+  defp command("tenant", [], _base, _domains), do: :whoami
+
+  defp command("tenant", ["none"], base, _),
     do: {:redirect, "#{base}/tenant?return=#{URI.encode_www_form(base)}"}
 
   defp command("tenant", [value], base, _),

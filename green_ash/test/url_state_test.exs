@@ -174,6 +174,22 @@ defmodule GreenAsh.UrlStateTest do
       refute to =~ "page="
     end
 
+    test "a pending deletion does not survive a change of rows" do
+      # Marking a row for deletion is a claim about what is on screen. Paging,
+      # filtering or sorting replaces the rows; leaving the banner up over the
+      # new ones means confirming it deletes a record you can no longer see.
+      for n <- 1..25, do: open("H#{n}", "0")
+
+      socket = visit(%{})
+      token = GreenAsh.Registry.encode_pk(hd(socket.assigns.rows))
+
+      {:noreply, marked} = Subfile.handle_event("process", %{"opt" => %{token => "4"}}, socket)
+      assert length(marked.assigns.confirm) == 1
+
+      {:noreply, paged} = Subfile.handle_params(%{"page" => "2"}, "/cli", marked)
+      assert paged.assigns.confirm == []
+    end
+
     test "a round trip through the URL reproduces the screen" do
       for n <- 1..25, do: open("H#{String.pad_leading(to_string(n), 2, "0")}", "0")
 

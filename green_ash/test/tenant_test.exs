@@ -77,11 +77,19 @@ defmodule GreenAsh.TenantTest do
                Command.parse(":tenant acme", @base, @domains)
     end
 
-    test ":tenant none and bare :tenant both clear it" do
-      cleared = {:redirect, "/cli/tenant?return=%2Fcli"}
+    test ":tenant none clears it" do
+      assert Command.parse(":tenant none", @base, @domains) ==
+               {:redirect, "/cli/tenant?return=%2Fcli"}
+    end
 
-      assert Command.parse(":tenant none", @base, @domains) == cleared
-      assert Command.parse(":tenant", @base, @domains) == cleared
+    test "bare :tenant reports rather than clearing" do
+      # Clearing is destructive — every multitenant screen closes behind it —
+      # and `:cols` alone already means "tell me". The same keystroke must not
+      # mean "undo" here, or checking which tenant you are in loses it.
+      assert Command.parse(":tenant", @base, @domains) == :whoami
+
+      {:noreply, socket} = Command.apply_to(socket(%{tenant: "acme", message: ""}), ":tenant")
+      assert socket.assigns.message =~ "tenant:acme"
     end
 
     test "a value needing encoding survives the trip" do

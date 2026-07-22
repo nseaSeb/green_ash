@@ -89,6 +89,11 @@ defmodule GreenAsh.Live.Subfile do
     {:noreply,
      socket
      |> assign(
+       # A pending deletion is a claim about the rows on screen. Filtering,
+       # sorting, paging or hiding a column replaces them, and the banner would
+       # otherwise stay up over rows it does not describe — confirming it then
+       # deletes a record you can no longer see.
+       confirm: [],
        args: filter_params(params),
        columns: parse_columns(params["cols"], all),
        # Against every column, not the shown ones: sorting by a column you
