@@ -3,10 +3,16 @@
 # CI GitHub) :
 #   1/3 — compile + test à froid, salle blanche
 #   2/3 — répétition d'installation fidèle (bootstrap vierge + `mix igniter.install`
-#         réel, via GitHub)
+#         réel) sur LA COPIE DE TRAVAIL, pas sur la version publiée
 #   3/3 — la même couche 1, rejouée sur une matrice de versions Elixir/OTP
 #
 # Usage : ./docker/verify.sh
+#         GREEN_ASH_SOURCE=hex ./docker/verify.sh   # vérifie la release publiée
+#
+# La couche 2 installe par défaut la copie de travail (`green_ash@path:`). Elle
+# est le seul endroit où l'installeur tourne — il n'a aucun test, et les couches
+# 1/3 ne l'exécutent jamais — donc la faire porter sur la version déjà publiée
+# revenait à ne jamais vérifier ce qu'on s'apprête à publier.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,7 +39,7 @@ for tag in "${MATRIX[@]}"; do
 done
 
 echo "=============================================="
-echo " Couche 2 — répétition d'installation fidèle"
+echo " Couche 2 — répétition d'installation fidèle (source: ${GREEN_ASH_SOURCE:-local})"
 echo "=============================================="
 if docker compose -f docker/verify/docker-compose.rehearsal.yml run --build --rm rehearsal; then
   echo "OK   rehearsal"
