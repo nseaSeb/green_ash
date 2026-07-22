@@ -16,7 +16,8 @@
 
   The value is not validated. Ash accepts any term as a tenant, and a console
   whose job is to probe your resources has no business deciding which tenants
-  are real.
+  are real. Both strategies are covered: `:attribute`, which scopes by a
+  column, and `:context`, which hands the tenant to the data layer.
 
 - **A `belongs_to` is a choice now, not a UUID you paste.** The action screen
   rendered a foreign key as what it is underneath — a box wanting a raw id —

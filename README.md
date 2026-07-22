@@ -10,7 +10,8 @@ Zero UI code.
 ├── examples/
 │   ├── bank/         # demo (Account/Transaction, policies, actor, filters)
 │   └── library/      # fresh-bootstrap demo (Author/Book) + installer run for real
-└── docker/verify/    # 3-layer pre-publish verification (see below)
+├── docker/verify/    # 3-layer pre-publish verification (see below)
+└── .github/          # CI: the library across three Elixir/OTP pairs, both examples
 ```
 
 ## The library — `green_ash/`
@@ -21,27 +22,43 @@ One-command install (discovers your Ash domains, patches your router):
 mix igniter.install green_ash
 ```
 
-Or manually — add the dependency and mount the macro in your router:
+Or manually — add the dependency and mount the macro in your router, behind a
+dev-only guard (the console has no access control of its own):
 
 ```elixir
-import GreenAsh.Router
+if Application.compile_env(:my_app, :dev_routes) do
+  import GreenAsh.Router
 
-scope "/" do
-  pipe_through :browser
-  green_ash "/cli"
+  scope "/" do
+    pipe_through :browser
+    green_ash "/cli"
+  end
 end
 ```
 
 See `green_ash/README.md` for details.
 
-Any Ash resource declared in an exposed domain then shows up in `/cli`: menu
-→ lists (filter + sort + pagination) → create / business-action update /
-confirmed destroy → inspection → actor & policies → Vim-style commands.
+Any Ash resource declared in an exposed domain then shows up in `/cli`:
+
+- **Menu** → **lists** (filter, sort, pagination, choose your columns with
+  `:cols`) → **create / business-action update / confirmed destroy** →
+  **record inspection**.
+- **Actor** (`:actor <resource> <id>`) to run everything as a given record and
+  watch your policies decide — a refusal is reported, not crashed on.
+- **Tenant** (`:tenant <value>`) to browse multitenant resources; without one
+  they are explicitly refused rather than opened wrong.
+- **Relationship pickers**: a `belongs_to` offers the related records instead
+  of asking you to paste a UUID.
+- **Shareable screens**: a list's filter, sort, columns and page live in the
+  URL, so it can be bookmarked or sent to a colleague.
+- **Vim-style commands** throughout.
+
 **Zero UI code.**
 
 - Decoupled: its own components, paths relative to the mount point, domains
   read dynamically at runtime — no dependency on the host's components/routes.
 - Tested against the **ETS** data layer (no Postgres required): `cd green_ash && mix test`.
+  The examples cover what only a real data layer can (`AshPostgres`).
 
 ## The example — `examples/bank/`
 
@@ -79,9 +96,15 @@ mix phx.server          # http://localhost:4201  (distinct from bank's 4200)
 mix test
 ```
 
+## Continuous integration — `.github/workflows/ci.yml`
+
+On every push: the library across `1.15-otp-25`, `1.17-otp-26` and
+`1.19-otp-28`, and both examples against Postgres. Fast, so it stays useful.
+
 ## Pre-publish verification — `docker/verify/`
 
-Three layers, all Docker-based (no GitHub CI):
+Deeper than CI, and run by hand before a Hex release. Three Docker-based
+layers:
 
 ```bash
 ./docker/verify.sh
@@ -95,6 +118,6 @@ Three layers, all Docker-based (no GitHub CI):
    see (already-installed archives, cached deps, etc.).
 3. Same matrix layer, run across versions — see `docker/verify/`.
 
-##Screenshots
+## Screenshots
 ![image info](./pictures/Bank.png)
 ![image info](./pictures/Library.png)

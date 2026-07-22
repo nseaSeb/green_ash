@@ -6,6 +6,7 @@ defmodule GreenAsh.TestSupport.Saas do
     resource GreenAsh.TestSupport.Project
     resource GreenAsh.TestSupport.Plan
     resource GreenAsh.TestSupport.Org
+    resource GreenAsh.TestSupport.Doc
   end
 end
 
@@ -89,5 +90,39 @@ defmodule GreenAsh.TestSupport.Org do
 
   actions do
     defaults [:read, create: [:slug]]
+  end
+end
+
+defmodule GreenAsh.TestSupport.Doc do
+  @moduledoc """
+  The other multitenancy strategy. `:attribute` scopes by a column, `:context`
+  hands the tenant to the data layer (a Postgres schema, typically) — the
+  console passes `tenant:` either way and never looks at the strategy, which
+  is worth asserting rather than assuming.
+  """
+  use Ash.Resource,
+    domain: GreenAsh.TestSupport.Saas,
+    data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  multitenancy do
+    strategy :context
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :title, :string, allow_nil?: false, public?: true
+  end
+
+  actions do
+    defaults [:read]
+
+    create :create do
+      primary? true
+      accept [:title]
+    end
   end
 end

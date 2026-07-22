@@ -17,7 +17,7 @@ defmodule GreenAsh.TenantTest do
 
   alias GreenAsh.{Command, Tenant}
   alias GreenAsh.Live.{Menu, Screen, Subfile}
-  alias GreenAsh.TestSupport.{Org, Project, Saas}
+  alias GreenAsh.TestSupport.{Doc, Org, Project, Saas}
 
   @domains [Saas]
   @base "/cli"
@@ -227,6 +227,19 @@ defmodule GreenAsh.TenantTest do
       # A list scoped to the wrong tenant and an empty one look identical
       # without this.
       assert html =~ "tenant:acme"
+    end
+
+    test "the other multitenancy strategy behaves the same" do
+      # :attribute scopes by a column, :context hands the tenant to the data
+      # layer. The console passes `tenant:` either way and never inspects the
+      # strategy — asserted rather than assumed.
+      Ash.create!(Doc, %{title: "Charter"}, tenant: "acme")
+      Ash.create!(Doc, %{title: "Invoice"}, tenant: "initech")
+
+      assert Enum.map(mount_list("doc", "read", %{tenant: "acme"}).assigns.rows, & &1.title) ==
+               ["Charter"]
+
+      assert mount_list("doc", "read", %{}).assigns.notice.kind == :tenant
     end
 
     test "a resource that never needed a tenant is unaffected by one being set" do
