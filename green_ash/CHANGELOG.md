@@ -47,6 +47,17 @@
 
 ### Fixed
 
+- **A cleared filter left `?filter[holder]=` in the URL.** An emptied field is
+  an absent filter, not a filter on `""`, and the leftover key meant a screen
+  you had filtered and cleared no longer matched the same screen never
+  filtered. Empty values are dropped now.
+
+- **A relationship picker did not see records created on the screen above it.**
+  A create leaves you in place to make another, but the pickers were built once
+  at mount — so a resource pointing at itself (`belongs_to :mentor, Author`)
+  never offered the author you had just created. The specs are re-read after a
+  successful create, alongside the form.
+
 - **A pending deletion could fire on a record you could no longer see.**
   Marking a row for deletion put a confirmation banner up; filtering, sorting,
   paging or hiding a column then replaced the rows underneath it while the

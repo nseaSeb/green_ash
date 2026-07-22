@@ -62,7 +62,7 @@ defmodule GreenAsh.Live.Screen do
            resource: resource,
            action: action,
            subject: subject,
-           specs: resource |> Field.specs(action) |> Field.with_options(actor, tenant),
+           specs: specs(resource, action, actor, tenant),
            result: nil,
            debug: false,
            message: socket.assigns.actor_notice || "",
@@ -74,6 +74,15 @@ defmodule GreenAsh.Live.Screen do
         {:ok, push_navigate(socket, to: return_to(resource, base, socket.assigns.domains))}
     end
   end
+
+  # Introspection plus one read for the relationship pickers — see
+  # `GreenAsh.Field.with_options/3` for what it refuses to guess.
+  defp specs(resource, action, actor, tenant) do
+    resource |> Field.specs(action) |> Field.with_options(actor, tenant)
+  end
+
+  defp build_specs(%{assigns: assigns}),
+    do: specs(assigns.resource, assigns.action, assigns.actor, assigns.tenant)
 
   defp load_subject(resource, nil, _actor, _tenant), do: {:ok, resource}
 
@@ -103,9 +112,15 @@ defmodule GreenAsh.Live.Screen do
     case AshPhoenix.Form.submit(ash_form(socket.assigns.form), params: params) do
       {:ok, result} ->
         if socket.assigns.action.type == :create do
+          # A create leaves you here to make another, so the screen is rebuilt
+          # rather than reused: the specs are re-read too, not just the form.
+          # A resource pointing at itself — `belongs_to :mentor, Author` — must
+          # offer the author you just created to the next one, and any picker
+          # whose records changed under you would otherwise stay as it was.
           {:noreply,
            socket
            |> assign(result: {:ok, result})
+           |> assign(specs: build_specs(socket))
            |> assign(
              form:
                fresh_form(

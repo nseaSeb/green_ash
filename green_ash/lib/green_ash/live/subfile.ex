@@ -127,8 +127,18 @@ defmodule GreenAsh.Live.Subfile do
     end)
   end
 
-  defp filter_params(%{"filter" => filter}) when is_map(filter), do: filter
+  defp filter_params(%{"filter" => filter}) when is_map(filter), do: prune(filter)
   defp filter_params(_params), do: %{}
+
+  # An emptied field is an absent filter, not a filter on "". Keeping it left
+  # `?filter[holder]=` in a URL whose whole point is being shareable, and made
+  # a screen you had filtered and cleared differ from the same screen never
+  # filtered — the second still carries the key, the first does not.
+  #
+  # Nothing is lost by dropping it: an argument that tolerates "" tolerates
+  # being absent too, and one that does not was already failing on mount,
+  # where the filter is empty by definition.
+  defp prune(filter), do: Map.reject(filter, fn {_key, value} -> value == "" end)
 
   # Pages are 1-based in the URL and 0-based inside: "page 1" is what the
   # pager already shows, and a shared link should say the same number.
@@ -334,7 +344,8 @@ defmodule GreenAsh.Live.Subfile do
   # whether it came from a click or from someone pasting the link.
   @impl true
   def handle_event("filter", %{"filter" => params}, socket) do
-    {:noreply, push_patch(socket, to: patch_to(socket, %{"filter" => params, "page" => nil}))}
+    changes = %{"filter" => prune(params), "page" => nil}
+    {:noreply, push_patch(socket, to: patch_to(socket, changes))}
   end
 
   def handle_event("page", %{"dir" => dir}, socket) do

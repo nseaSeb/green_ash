@@ -195,12 +195,22 @@ defmodule GreenAsh.TestSupport.Author do
     attribute :name, :string, public?: true
   end
 
+  # Self-referential on purpose: creating an author must make it available as
+  # the next author's mentor, which is the case that catches a picker built
+  # once at mount and never rebuilt.
+  relationships do
+    belongs_to :mentor, GreenAsh.TestSupport.Author do
+      public? true
+      attribute_public? true
+    end
+  end
+
   actions do
     defaults [:read]
 
     create :create do
       primary? true
-      accept [:name]
+      accept [:name, :mentor_id]
     end
   end
 end

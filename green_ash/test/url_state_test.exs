@@ -174,6 +174,38 @@ defmodule GreenAsh.UrlStateTest do
       refute to =~ "page="
     end
 
+    test "clearing a filter field leaves nothing behind in the URL" do
+      # ?filter[holder]= is not a filter, it is litter in a link whose point is
+      # being shareable.
+      to =
+        %{"filter" => %{"holder" => "Ada"}}
+        |> visit()
+        |> event("filter", %{"filter" => %{"holder" => ""}})
+        |> patched_to()
+
+      assert to == "/cli/r/account/list/search"
+    end
+
+    test "an emptied field is dropped while the others are kept" do
+      to =
+        visit(%{})
+        |> event("filter", %{"filter" => %{"holder" => "Ada", "unused" => ""}})
+        |> patched_to()
+
+      assert to =~ "filter[holder]=Ada"
+      refute to =~ "unused"
+    end
+
+    test "a screen filtered and cleared matches one never filtered" do
+      open("Ada", "1")
+
+      never = visit(%{})
+      cleared = visit(%{"filter" => %{"holder" => ""}})
+
+      assert cleared.assigns.args == never.assigns.args
+      assert Enum.map(cleared.assigns.rows, & &1.holder) == ["Ada"]
+    end
+
     test "a pending deletion does not survive a change of rows" do
       # Marking a row for deletion is a claim about what is on screen. Paging,
       # filtering or sorting replaces the rows; leaving the banner up over the

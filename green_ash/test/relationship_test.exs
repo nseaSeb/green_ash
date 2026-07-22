@@ -107,6 +107,49 @@ defmodule GreenAsh.RelationshipTest do
     end
   end
 
+  describe "after a create on the same screen" do
+    # A create leaves you on the screen to make another. The pickers were built
+    # once at mount, so the record you had just created was missing from them
+    # until you navigated away and back.
+    defp mount_author_create do
+      {:ok, socket} =
+        Screen.mount(%{"resource" => "author", "action" => "create"}, %{}, socket())
+
+      socket
+    end
+
+    test "the record just created is offered to the next one" do
+      socket = mount_author_create()
+      assert socket |> spec(:mentor_id) |> Map.fetch!(:options) == []
+
+      {:noreply, socket} =
+        Screen.handle_event("submit", %{"form" => %{"name" => "Ursula Le Guin"}}, socket)
+
+      assert [{label, _id}] = spec(socket, :mentor_id).options
+      assert label =~ "Ursula Le Guin"
+    end
+
+    test "the screen is still ready for another create" do
+      socket = mount_author_create()
+
+      {:noreply, socket} =
+        Screen.handle_event("submit", %{"form" => %{"name" => "Ursula Le Guin"}}, socket)
+
+      assert {:ok, _record} = socket.assigns.result
+      assert spec(socket, :mentor_id).input_type == "select"
+    end
+
+    test "a failed create leaves the pickers alone" do
+      socket = mount_author_create()
+
+      {:noreply, socket} =
+        Screen.handle_event("submit", %{"form" => %{"mentor_id" => "not-a-uuid"}}, socket)
+
+      assert socket.assigns.result == :error
+      assert spec(socket, :mentor_id).options == []
+    end
+  end
+
   describe "when a choice cannot honestly be offered" do
     test "a read the actor may not perform leaves the id box" do
       # Secret's policy demands an actor; the console is anonymous here.
