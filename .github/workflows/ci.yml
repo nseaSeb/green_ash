@@ -1,13 +1,18 @@
 name: CI
 
 # Complements docker/verify.sh rather than replacing it. That script is the
-# pre-publish gate: a clean room, a real `mix igniter.install` from GitHub,
-# the full version matrix. This runs on every push, so it has to be fast —
-# same matrix for the library, one version for the examples.
+# pre-publish gate: a clean room, a real `mix igniter.install` of the working
+# copy, the full version matrix. This runs on every push, so it has to be
+# fast — same matrix for the library, one version for the examples.
 on:
   push:
     branches: [main]
   pull_request:
+  # Lançable à la main depuis l'onglet Actions. Sans ça, la seule façon de
+  # rejouer la CI est de fabriquer un commit — ce qui s'est fait sentir dès
+  # le premier jour, Actions ayant été activé sur le dépôt après l'ouverture
+  # de la PR : le workflow existait, mais plus aucun événement ne venait.
+  workflow_dispatch:
 
 permissions:
   contents: read
