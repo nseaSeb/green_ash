@@ -47,10 +47,17 @@
 
 - **Paging an unordered read could repeat a record on two pages, or show it on
   neither.** Nothing obliges a data layer to return rows in the same order
-  twice, and most reads declare no sort. The primary key is now appended as a
-  final tiebreaker, which leaves your sort — and any the action declares — in
-  charge and only settles what they leave open. Found by a test of the
-  console's own paging that passed or failed depending on the run.
+  twice, and most reads declare no sort. Read replicas make this plain —
+  consecutive pages can be served by different nodes — but a single instance
+  is free to reorder too. The primary key is now appended as a final
+  tiebreaker, which leaves your sort — and any the action declares — in charge
+  and only settles what they leave open. Found by a test of the console's own
+  paging that passed or failed depending on the run.
+
+  Note what this does and does not buy: a total order makes the *ordering*
+  reproducible, it does not freeze the rows. Paging is offset-based, so a write
+  landing between two page requests still shifts the window. Keyset paging is
+  the answer to that, and is not implemented yet.
 
 - **Columns are yours to choose.** Lists rendered every public attribute at a
   fixed width of twelve characters, which on any real resource is a wall of

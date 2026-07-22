@@ -286,9 +286,17 @@ defmodule GreenAsh.Live.Subfile do
 
   # Paging an unordered read is not reliable: nothing obliges the data layer to
   # return the rows in the same order twice, so a record can sit on both pages
-  # or on neither. Appending the primary key breaks every tie, which leaves the
-  # chosen sort (and any the action declares) in charge and only settles what
-  # they leave open.
+  # or on neither. Read replicas make it plain — consecutive pages can be
+  # served by different nodes — but a single instance is free to reorder too.
+  # Appending the primary key breaks every tie, which leaves the chosen sort
+  # (and any the action declares) in charge and only settles what they leave
+  # open.
+  #
+  # A total order is what makes the *ordering* reproducible; it does not freeze
+  # the rows. These pages are offset-based, so a write landing between two page
+  # requests — or replication lag making one node's data older — still shifts
+  # the window under you. Keyset paging is the answer to that, and the console
+  # does not do it yet.
   defp stable_sort(query, resource) do
     case Ash.Resource.Info.primary_key(resource) do
       [] -> query
