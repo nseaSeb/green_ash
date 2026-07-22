@@ -1,7 +1,7 @@
 defmodule GreenAsh.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.3.1"
   # Monorepo: the root repository also contains the examples (bank/, library/),
   # so we point precisely at the lib's subdirectory.
   @source_url "https://github.com/nseaSeb/green_ash/tree/main/green_ash"

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1 (2026-07-22)
+
+### Fixed
+
+- **`mix format` no longer rewrites the router snippet from the README.** The
+  installer adds `import_deps: [:green_ash]` to the host's formatter, but the
+  package exported nothing for it to import — so the formatter treated
+  `green_ash` as an ordinary call and turned `green_ash "/cli"` into
+  `green_ash("/cli")` the first time anyone formatted. Copy the README, run
+  the formatter, and your router no longer matched the documentation you
+  copied it from. The package now exports
+  `locals_without_parens: [green_ash: 1, green_ash: 2]`.
+
+  Existing routers are not disturbed: the formatter leaves parentheses where
+  they already are, it just stops adding them.
+
 ## 0.3.0 (2026-07-22)
 
 Takes over from 0.2.0 on both fronts it left open.
