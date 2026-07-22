@@ -47,21 +47,33 @@ defmodule GreenAsh.Live.Menu do
   defp dispatch(%{target: {:resource, resource}}, socket) do
     {:noreply,
      socket
-     |> assign(level: :resource, resource: resource, message: resource_message(resource))
+     |> assign(
+       level: :resource,
+       resource: resource,
+       message: resource_message(resource, socket.assigns.tenant)
+     )
      |> assign_options()}
   end
 
   defp dispatch(%{target: {:action, resource, name, :create}}, socket) do
     {:noreply,
      push_navigate(socket,
-       to: ga_path(socket.assigns.base, "/r/#{Registry.resource_slug(resource)}/a/#{name}")
+       to:
+         ga_path(
+           socket.assigns.base,
+           "/r/#{Registry.resource_slug(resource, socket.assigns.domains)}/a/#{name}"
+         )
      )}
   end
 
   defp dispatch(%{target: {:action, resource, name, :read}}, socket) do
     {:noreply,
      push_navigate(socket,
-       to: ga_path(socket.assigns.base, "/r/#{Registry.resource_slug(resource)}/list/#{name}")
+       to:
+         ga_path(
+           socket.assigns.base,
+           "/r/#{Registry.resource_slug(resource, socket.assigns.domains)}/list/#{name}"
+         )
      )}
   end
 
@@ -88,7 +100,7 @@ defmodule GreenAsh.Live.Menu do
         %{
           n: n,
           label: Registry.resource_title(resource),
-          detail: resource_detail(resource),
+          detail: resource_detail(resource, socket.assigns.tenant),
           target: {:resource, resource}
         }
       end)
@@ -113,8 +125,8 @@ defmodule GreenAsh.Live.Menu do
     assign(socket, options: options)
   end
 
-  defp resource_detail(resource) do
-    if Registry.tenant_required?(resource) do
+  defp resource_detail(resource, tenant) do
+    if blocked?(resource, tenant) do
       Registry.resource_label(resource) <> " · tenant required"
     else
       Registry.resource_label(resource)
@@ -124,13 +136,16 @@ defmodule GreenAsh.Live.Menu do
   # Said once on entering the resource rather than tagged on each of its
   # actions: every action is equally unopenable, so per-line labels would
   # repeat the same word six times and say nothing more.
-  defp resource_message(resource) do
-    if Registry.tenant_required?(resource) do
-      "#{Registry.resource_label(resource)} requires a tenant: no action can be opened here."
+  defp resource_message(resource, tenant) do
+    if blocked?(resource, tenant) do
+      "#{Registry.resource_label(resource)} requires a tenant: set one with :tenant <value>."
     else
       ""
     end
   end
+
+  defp blocked?(resource, tenant),
+    do: Registry.tenant_required?(resource) and is_nil(tenant)
 
   @impl true
   def render(assigns) do
@@ -140,7 +155,7 @@ defmodule GreenAsh.Live.Menu do
       <div class="crt-head">
         <span>GREEN·ASH / {program(assigns)}</span>
         <span class="crt-title">{title(assigns)}</span>
-        <span>◆ {Actor.label(@actor)} · {today()}</span>
+        <span>◆ {Actor.label(@actor)}{tenant_suffix(@tenant)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 

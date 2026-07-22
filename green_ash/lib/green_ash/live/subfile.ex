@@ -11,62 +11,313 @@ defmodule GreenAsh.Live.Subfile do
 
   @impl true
   def mount(%{"resource" => slug, "action" => action_name}, _session, socket) do
-    case Registry.resource_by_slug(socket.assigns.domains, slug) do
-      nil ->
-        {:ok, push_navigate(socket, to: socket.assigns.base)}
-
-      resource ->
-        if Registry.tenant_required?(resource) do
-          {:ok, assign_tenant_notice(socket, resource)}
-        else
-          mount_rows(socket, resource, action_name)
-        end
+    with {:ok, resource} <- fetch_resource(socket, slug),
+         :ok <- check_tenant(resource, socket.assigns.tenant),
+         {:ok, action} <- fetch_read_action(resource, action_name) do
+      mount_rows(socket, resource, action)
+    else
+      # An unknown slug is the one case with nothing to say: the URL names no
+      # resource, so there is no screen to head it with. The menu it is.
+      :no_resource -> {:ok, push_navigate(socket, to: socket.assigns.base)}
+      {:notice, notice} -> {:ok, assign(socket, notice: notice)}
     end
   end
 
-  defp mount_rows(socket, resource, action_name) do
-    action = Registry.action(resource, action_name)
+  defp fetch_resource(socket, slug) do
+    case Registry.resource_by_slug(socket.assigns.domains, slug) do
+      nil -> :no_resource
+      resource -> {:ok, resource}
+    end
+  end
+
+  # Only a refusal while no tenant is set: with one, the resource reads like
+  # any other.
+  defp check_tenant(resource, tenant) do
+    if Registry.tenant_required?(resource) and is_nil(tenant),
+      do: {:notice, tenant_notice(resource)},
+      else: :ok
+  end
+
+  # Both halves guard a raise: an action name from the URL that matches no
+  # action leaves `action` nil (which `Field.specs/2` cannot take), and a
+  # non-read action reaches `Ash.Query.for_read/4`, which rejects it.
+  defp fetch_read_action(resource, name) do
+    case Registry.action(resource, name) do
+      nil -> {:notice, no_action_notice(resource, name)}
+      %{type: :read} = action -> {:ok, action}
+      action -> {:notice, not_readable_notice(resource, action)}
+    end
+  end
+
+  # Only what the URL cannot say is settled here. Filter, sort and page come
+  # from the query string, so they are read in `handle_params/3` — which
+  # LiveView runs after mount and on every patch alike.
+  defp mount_rows(socket, resource, action) do
+    pagination = required_pagination(action)
 
     {:ok,
-     socket
-     |> assign(
+     assign(socket,
        resource: resource,
        action: action,
+       pagination: pagination,
+       per_page: page_size(pagination),
        codes: build_codes(resource),
-       columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
+       all_columns: Enum.map(Ash.Resource.Info.public_attributes(resource), & &1.name),
        arg_specs: Field.specs(resource, action),
-       args: %{},
-       sort: nil,
-       page: 0,
+       list_path: list_path(socket, resource, action),
        has_next: false,
        expanded: MapSet.new(),
        confirm: [],
+       read_error: nil,
        message: socket.assigns.actor_notice || ""
+     )}
+  end
+
+  defp list_path(socket, resource, action) do
+    slug = Registry.resource_slug(resource, socket.assigns.domains)
+    ga_path(socket.assigns.base, "/r/#{slug}/list/#{action.name}")
+  end
+
+  # A screen the console cannot open has no rows to read and no state to take
+  # from the URL.
+  @impl true
+  def handle_params(_params, _uri, %{assigns: %{notice: _}} = socket), do: {:noreply, socket}
+
+  def handle_params(params, _uri, socket) do
+    all = socket.assigns.all_columns
+
+    {:noreply,
+     socket
+     |> assign(
+       # A pending deletion is a claim about the rows on screen. Filtering,
+       # sorting, paging or hiding a column replaces them, and the banner would
+       # otherwise stay up over rows it does not describe — confirming it then
+       # deletes a record you can no longer see.
+       confirm: [],
+       args: filter_params(params),
+       columns: parse_columns(params["cols"], all),
+       # Against every column, not the shown ones: sorting by a column you
+       # have hidden is reasonable, and dropping the sort silently would look
+       # like the sort itself failed.
+       sort: parse_sort(params["sort"], all),
+       page: parse_page(params["page"])
      )
      |> assign_filter_form()
      |> load_rows()}
   end
 
+  # "holder,balance", in the order given. Anything the resource does not have
+  # is dropped; an empty result falls back to every column, so a stale link
+  # shows a full screen rather than a bare one.
+  defp parse_columns(nil, all), do: all
+
+  defp parse_columns(value, all) do
+    case value |> to_string() |> String.split(",", trim: true) |> known_columns(all) do
+      [] -> all
+      columns -> columns
+    end
+  end
+
+  defp known_columns(names, all) do
+    Enum.flat_map(names, fn name ->
+      case Enum.find(all, &(to_string(&1) == String.trim(name))) do
+        nil -> []
+        column -> [column]
+      end
+    end)
+  end
+
+  defp filter_params(%{"filter" => filter}) when is_map(filter), do: prune(filter)
+  defp filter_params(_params), do: %{}
+
+  # An emptied field is an absent filter, not a filter on "". Keeping it left
+  # `?filter[holder]=` in a URL whose whole point is being shareable, and made
+  # a screen you had filtered and cleared differ from the same screen never
+  # filtered — the second still carries the key, the first does not.
+  #
+  # Nothing is lost by dropping it: an argument that tolerates "" tolerates
+  # being absent too, and one that does not was already failing on mount,
+  # where the filter is empty by definition.
+  defp prune(filter), do: Map.reject(filter, fn {_key, value} -> value == "" end)
+
+  # Pages are 1-based in the URL and 0-based inside: "page 1" is what the
+  # pager already shows, and a shared link should say the same number.
+  defp parse_page(value) do
+    case Integer.parse(to_string(value)) do
+      {n, ""} when n > 1 -> n - 1
+      _ -> 0
+    end
+  end
+
+  # "balance:desc". Both halves are checked against what this screen actually
+  # has — the string arrives from the URL, so it is a request, not a fact.
+  defp parse_sort(value, columns) do
+    with [field, dir] <- String.split(to_string(value), ":", parts: 2),
+         {:ok, dir} <- sort_direction(dir),
+         col when not is_nil(col) <- Enum.find(columns, &(to_string(&1) == field)) do
+      {col, dir}
+    else
+      _ -> nil
+    end
+  end
+
+  defp sort_direction("asc"), do: {:ok, :asc}
+  defp sort_direction("desc"), do: {:ok, :desc}
+  defp sort_direction(_other), do: :error
+
+  # The screen's whole state as a path, so that every navigation is a patch and
+  # a reload lands on the same screen.
+  defp patch_to(socket, changes) do
+    params =
+      %{
+        "filter" => socket.assigns.args,
+        "cols" => encode_columns(socket.assigns.columns, socket.assigns.all_columns),
+        "sort" => encode_sort(socket.assigns.sort),
+        "page" => encode_page(socket.assigns.page)
+      }
+      |> Map.merge(changes)
+      |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}] end)
+      |> Map.new()
+
+    socket.assigns.list_path <> query_string(params)
+  end
+
+  defp query_string(params) when map_size(params) == 0, do: ""
+  defp query_string(params), do: "?" <> Plug.Conn.Query.encode(params)
+
+  defp encode_sort(nil), do: nil
+  defp encode_sort({field, dir}), do: "#{field}:#{dir}"
+
+  defp encode_page(0), do: nil
+  defp encode_page(page), do: to_string(page + 1)
+
+  # Showing everything is the default, so it says nothing in the URL.
+  defp encode_columns(columns, all) when columns == all, do: nil
+  defp encode_columns(columns, _all), do: Enum.map_join(columns, ",", &to_string/1)
+
   defp assign_filter_form(socket),
     do: assign(socket, filter_form: to_form(socket.assigns.args, as: :filter))
 
+  # A read is the console's most failure-prone call, and every failure here is
+  # a legitimate answer rather than a fault: a policy forbidding the read (the
+  # very thing this console exists to exercise), or a filter value that will
+  # not cast. `Ash.read!/2` turned both into a 500; the reason belongs on the
+  # screen instead.
   defp load_rows(socket) do
     %{resource: resource, action: action, args: args, actor: actor, page: page, sort: sort} =
       socket.assigns
 
-    fetched =
-      resource
-      |> Ash.Query.for_read(action.name, args, actor: actor)
-      |> maybe_sort(sort)
-      |> Ash.Query.limit(@per_page + 1)
-      |> Ash.Query.offset(page * @per_page)
-      |> Ash.read!(actor: actor)
+    %{pagination: pagination, per_page: per_page, tenant: tenant} = socket.assigns
 
-    assign(socket, rows: Enum.take(fetched, @per_page), has_next: length(fetched) > @per_page)
+    resource
+    |> Ash.Query.for_read(action.name, args, actor: actor, tenant: tenant)
+    |> maybe_sort(sort)
+    |> stable_sort(resource)
+    |> read(pagination, per_page, actor, tenant, page)
+    |> case do
+      {:ok, rows} ->
+        assign(socket,
+          rows: Enum.take(rows, per_page),
+          has_next: length(rows) > per_page,
+          read_error: nil
+        )
+
+      {:error, error} ->
+        assign(socket, rows: [], has_next: false, read_error: read_error_message(error, actor))
+    end
+  end
+
+  # One extra row is fetched to know whether a next page exists without
+  # counting.
+  #
+  # Ash's `:page` option is used only where it must be: an action whose
+  # pagination is `required?` refuses a read without it. Everywhere else plain
+  # limit/offset is kept, because `:page` brings the action's `max_page_size`
+  # with it — asking for more silently yields a short page rather than an
+  # error, which would read as "that is all there is".
+  defp read(query, pagination, per_page, actor, tenant, page) do
+    result =
+      if pagination do
+        Ash.read(query,
+          actor: actor,
+          tenant: tenant,
+          page: [limit: per_page + 1, offset: page * per_page]
+        )
+      else
+        query
+        |> Ash.Query.limit(per_page + 1)
+        |> Ash.Query.offset(page * per_page)
+        |> Ash.read(actor: actor, tenant: tenant)
+      end
+
+    case result do
+      {:ok, %{results: rows}} -> {:ok, rows}
+      {:ok, rows} when is_list(rows) -> {:ok, rows}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  # The `:page` path is bounded by the action's own cap, so the console's page
+  # has to sit one row below it — otherwise the lookahead row is the one that
+  # gets cut, "next page" reads as false, and the remaining records are simply
+  # never shown.
+  defp page_size(%{max_page_size: max}) when is_integer(max), do: min(@per_page, max - 1)
+  defp page_size(_pagination), do: @per_page
+
+  defp required_pagination(action) do
+    case Registry.pagination(action) do
+      %{required?: true} = pagination -> pagination
+      _ -> nil
+    end
+  end
+
+  defp read_error_message(%Ash.Error.Forbidden{}, actor) do
+    "Forbidden for #{Actor.label(actor)} — this read is denied by a policy." <>
+      if(is_nil(actor), do: " Set an actor with :actor <resource> <id>.", else: "")
+  end
+
+  defp read_error_message(error, _actor), do: "Read failed — " <> error_text(error)
+
+  # Ash errors carry a multi-line breadcrumb trail; the status line holds one
+  # line, so keep the messages and drop the trail.
+  defp error_text(error) do
+    error
+    |> Map.get(:errors, [error])
+    |> Enum.map_join(" · ", &condense/1)
+    |> String.slice(0, 240)
+  end
+
+  defp condense(error) do
+    error
+    |> Exception.message()
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == "" or &1 =~ ~r/^(Bread Crumbs:|> )/))
+    |> Enum.join(" ")
   end
 
   defp maybe_sort(query, nil), do: query
   defp maybe_sort(query, {field, dir}), do: Ash.Query.sort(query, [{field, dir}])
+
+  # Paging an unordered read is not reliable: nothing obliges the data layer to
+  # return the rows in the same order twice, so a record can sit on both pages
+  # or on neither. Read replicas make it plain — consecutive pages can be
+  # served by different nodes — but a single instance is free to reorder too.
+  # Appending the primary key breaks every tie, which leaves the chosen sort
+  # (and any the action declares) in charge and only settles what they leave
+  # open.
+  #
+  # A total order is what makes the *ordering* reproducible; it does not freeze
+  # the rows. These pages are offset-based, so a write landing between two page
+  # requests — or replication lag making one node's data older — still shifts
+  # the window under you. Keyset paging is the answer to that, and the console
+  # does not do it yet.
+  defp stable_sort(query, resource) do
+    case Ash.Resource.Info.primary_key(resource) do
+      [] -> query
+      keys -> Ash.Query.sort(query, Enum.map(keys, &{&1, :asc}))
+    end
+  end
 
   defp build_codes(resource) do
     actions = Registry.actions(resource)
@@ -88,26 +339,39 @@ defmodule GreenAsh.Live.Subfile do
     updates ++ destroy ++ [%{code: "5", label: "Display", kind: :display, action: nil}]
   end
 
+  # Filter, sort and page all patch the URL rather than assigning directly:
+  # `handle_params/3` is then the single place that reads the screen's state,
+  # whether it came from a click or from someone pasting the link.
   @impl true
   def handle_event("filter", %{"filter" => params}, socket) do
-    {:noreply, socket |> assign(args: params, page: 0) |> assign_filter_form() |> load_rows()}
+    changes = %{"filter" => prune(params), "page" => nil}
+    {:noreply, push_patch(socket, to: patch_to(socket, changes))}
   end
 
-  def handle_event("page", %{"dir" => "next"}, socket) do
-    if socket.assigns.has_next,
-      do: {:noreply, socket |> update(:page, &(&1 + 1)) |> load_rows()},
-      else: {:noreply, socket}
+  def handle_event("page", %{"dir" => dir}, socket) do
+    %{page: page, has_next: has_next} = socket.assigns
+
+    page =
+      case dir do
+        "next" -> if has_next, do: page + 1, else: page
+        _prev -> max(page - 1, 0)
+      end
+
+    {:noreply, push_patch(socket, to: patch_to(socket, %{"page" => encode_page(page)}))}
   end
 
-  def handle_event("page", %{"dir" => "prev"}, socket) do
-    {:noreply, socket |> update(:page, &max(&1 - 1, 0)) |> load_rows()}
-  end
-
+  # The column name comes off the wire, so it is matched against the columns
+  # actually rendered rather than turned into an atom: an unknown one is
+  # ignored instead of raising.
   def handle_event("sort", %{"col" => col}, socket) do
-    field = String.to_existing_atom(col)
+    case Enum.find(socket.assigns.columns, &(to_string(&1) == col)) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply,
-     socket |> assign(sort: next_sort(socket.assigns.sort, field), page: 0) |> load_rows()}
+      field ->
+        sort = encode_sort(next_sort(socket.assigns.sort, field))
+        {:noreply, push_patch(socket, to: patch_to(socket, %{"sort" => sort, "page" => nil}))}
+    end
   end
 
   def handle_event("process", %{"opt" => opts}, socket) do
@@ -127,11 +391,11 @@ defmodule GreenAsh.Live.Subfile do
   def handle_event("process", _params, socket), do: {:noreply, socket}
 
   def handle_event("destroy-confirm", _params, socket) do
-    actor = socket.assigns.actor
+    %{actor: actor, tenant: tenant} = socket.assigns
 
     results =
       Enum.map(socket.assigns.confirm, fn {record, action} ->
-        case Ash.destroy(record, action: action, actor: actor) do
+        case Ash.destroy(record, action: action, actor: actor, tenant: tenant) do
           :ok -> :ok
           {:error, %Ash.Error.Forbidden{}} -> :forbidden
           _ -> :error
@@ -148,7 +412,8 @@ defmodule GreenAsh.Live.Subfile do
     Command.apply_to(socket, cmd,
       on_debug: fn s ->
         {:noreply, assign(s, message: "Use option 5 to display a record.")}
-      end
+      end,
+      on_columns: &set_columns/2
     )
   end
 
@@ -156,6 +421,34 @@ defmodule GreenAsh.Live.Subfile do
     do: {:noreply, push_navigate(socket, to: socket.assigns.base)}
 
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
+
+  # `:cols` alone lists what is on offer, `:cols all` restores them, and any
+  # other argument list becomes the columns in the order given. Unknown names
+  # are named back rather than dropped in silence — a typo would otherwise
+  # look like the column does not exist.
+  defp set_columns([], socket) do
+    {:noreply, assign(socket, message: "Columns: " <> available(socket))}
+  end
+
+  defp set_columns(names, socket) do
+    all = socket.assigns.all_columns
+
+    case Enum.reject(names, fn n -> n in ["all"] or Enum.any?(all, &(to_string(&1) == n)) end) do
+      [] ->
+        columns = if "all" in names, do: all, else: known_columns(names, all)
+
+        {:noreply,
+         push_patch(socket, to: patch_to(socket, %{"cols" => encode_columns(columns, all)}))}
+
+      unknown ->
+        {:noreply,
+         assign(socket,
+           message: "No such column: #{Enum.join(unknown, ", ")}. Columns: " <> available(socket)
+         )}
+    end
+  end
+
+  defp available(socket), do: Enum.map_join(socket.assigns.all_columns, " ", &to_string/1)
 
   defp process([], socket), do: {:noreply, assign(socket, message: "No option entered.")}
 
@@ -188,7 +481,7 @@ defmodule GreenAsh.Live.Subfile do
 
       match?([_], updates) ->
         [{rec, action}] = updates
-        slug = Registry.resource_slug(socket.assigns.resource)
+        slug = Registry.resource_slug(socket.assigns.resource, socket.assigns.domains)
 
         {:noreply,
          push_navigate(socket,
@@ -235,6 +528,15 @@ defmodule GreenAsh.Live.Subfile do
   defp add(list, true, item), do: list ++ [item]
   defp add(list, false, _item), do: list
 
+  # Both are shown, not one over the other. A stored actor that failed to load
+  # (`message`) is the usual reason a read is then refused (`read_error`), so
+  # hiding either leaves the other looking unexplained.
+  defp status(message, read_error) do
+    [message, read_error]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" · ")
+  end
+
   defp next_sort({field, :asc}, field), do: {field, :desc}
   defp next_sort({field, :desc}, field), do: nil
   defp next_sort(_other, field), do: {field, :asc}
@@ -245,10 +547,19 @@ defmodule GreenAsh.Live.Subfile do
 
   defp expanded?(set, row), do: MapSet.member?(set, Registry.encode_pk(row))
 
-  defp cell(row, col), do: row |> Map.get(col) |> fmt() |> truncate()
+  defp cell(row, col), do: row |> Map.get(col) |> fmt()
 
-  defp truncate(s) when byte_size(s) > 12, do: String.slice(s, 0, 11) <> "…"
-  defp truncate(s), do: s
+  # `byte_size` here but `String.slice` below used to disagree on any accented
+  # text: "Éléonore" is 8 characters and 11 bytes, so it was cut on a count it
+  # never had. Both sides now measure characters, and 24 of them rather than
+  # 12 — the old width truncated most identifiers into uselessness.
+  @max_cell 24
+
+  defp truncate(value) when is_binary(value) do
+    if String.length(value) > @max_cell,
+      do: String.slice(value, 0, @max_cell - 1) <> "…",
+      else: value
+  end
 
   defp fmt(nil), do: ""
   defp fmt(%Decimal{} = d), do: Decimal.to_string(d)
@@ -260,9 +571,9 @@ defmodule GreenAsh.Live.Subfile do
   defp today, do: Calendar.strftime(Date.utc_today(), "%d/%m/%y")
 
   @impl true
-  def render(%{tenant_notice: true} = assigns) do
+  def render(%{notice: _} = assigns) do
     ~H"""
-    <.tenant_notice resource={@resource} strategy={@strategy} />
+    <.notice notice={@notice} />
     """
   end
 
@@ -273,7 +584,7 @@ defmodule GreenAsh.Live.Subfile do
       <div class="crt-head">
         <span>GREEN·ASH / {String.upcase(Registry.resource_label(@resource))}</span>
         <span class="crt-title">LIST · {Registry.resource_title(@resource)}</span>
-        <span>◆ {Actor.label(@actor)} · {today()}</span>
+        <span>◆ {Actor.label(@actor)}{tenant_suffix(@tenant)} · {today()}</span>
       </div>
       <div class="crt-rule"></div>
 
@@ -321,7 +632,9 @@ defmodule GreenAsh.Live.Subfile do
                       autocomplete="off"
                     />
                   </td>
-                  <td :for={col <- @columns}>{cell(row, col)}</td>
+                  <td :for={col <- @columns} title={cell(row, col)}>
+                    {truncate(cell(row, col))}
+                  </td>
                 </tr>
                 <tr :if={expanded?(@expanded, row)} class="exp">
                   <td></td>
@@ -362,7 +675,7 @@ defmodule GreenAsh.Live.Subfile do
 
       <div class="crt-foot">
         <div class="crt-rule"></div>
-        <div class="crt-msg">{@message}</div>
+        <div class={["crt-msg", @read_error && "crt-err"]}>{status(@message, @read_error)}</div>
         <form phx-submit="command" class="crt-cmd" autocomplete="off">
           <label>Command ===></label>
           <input type="text" name="cmd" value="" id="cmd" />

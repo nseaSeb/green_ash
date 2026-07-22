@@ -17,5 +17,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # La lib n'est pas copiée dans l'image : elle est montée, pour que la
+    # répétition porte sur la copie de travail sans reconstruire l'image à
+    # chaque modification. En lecture seule — un dep `path:` se compile dans le
+    # _build du projet consommateur, jamais dans la source.
+    volumes:
+      - ../../green_ash:/opt/green_ash:ro
     environment:
       PGHOST: postgres
+      GREEN_ASH_SOURCE: "${GREEN_ASH_SOURCE:-local}"
+      GREEN_ASH_PATH: /opt/green_ash

@@ -12,7 +12,14 @@ defmodule GreenAsh.MultitenancyTest do
     %Phoenix.LiveView.Socket{
       assigns:
         Map.merge(
-          %{__changed__: %{}, domains: @domains, base: "/cli", actor: nil, actor_notice: nil},
+          %{
+            __changed__: %{},
+            domains: @domains,
+            base: "/cli",
+            tenant: nil,
+            actor: nil,
+            actor_notice: nil
+          },
           assigns
         )
     }
@@ -21,6 +28,16 @@ defmodule GreenAsh.MultitenancyTest do
   defp session(actor) do
     %{"green_ash" => %{"domains" => ["Elixir.GreenAsh.TestSupport.Saas"], "base" => "/cli"}}
     |> Map.merge(if actor, do: %{GreenAsh.Actor.session_key() => actor}, else: %{})
+  end
+
+  # Filter/sort/page come from the URL, so a list screen is only settled once
+  # handle_params has run — as LiveView does right after mount.
+  defp mount_list(slug, action) do
+    {:ok, socket} =
+      GreenAsh.Live.Subfile.mount(%{"resource" => slug, "action" => action}, %{}, socket(%{}))
+
+    {:noreply, socket} = GreenAsh.Live.Subfile.handle_params(%{}, "/cli", socket)
+    {:ok, socket}
   end
 
   defp on_mount(session) do
@@ -65,7 +82,7 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      refute Map.has_key?(mounted.assigns, :tenant_notice)
+      refute Map.has_key?(mounted.assigns, :notice)
     end
   end
 
@@ -101,9 +118,9 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      assert mounted.assigns.tenant_notice
-      assert mounted.assigns.strategy == :attribute
-      assert mounted.assigns.resource == Project
+      assert mounted.assigns.notice.kind == :tenant
+      assert mounted.assigns.notice.strategy == :attribute
+      assert mounted.assigns.notice.resource == Project
     end
 
     test "Screen.mount/3 returns a notice rather than raising" do
@@ -114,28 +131,22 @@ defmodule GreenAsh.MultitenancyTest do
                  socket(%{})
                )
 
-      assert mounted.assigns.tenant_notice
+      assert mounted.assigns.notice.kind == :tenant
       # Escape goes back to the menu, not to the list: the list is just as unopenable.
       assert mounted.assigns.return_to == "/cli"
     end
 
     test "a non-tenant resource still mounts normally" do
-      assert {:ok, mounted} =
-               GreenAsh.Live.Subfile.mount(
-                 %{"resource" => "org", "action" => "read"},
-                 %{},
-                 socket(%{})
-               )
+      assert {:ok, mounted} = mount_list("org", "read")
 
-      refute Map.has_key?(mounted.assigns, :tenant_notice)
+      refute Map.has_key?(mounted.assigns, :notice)
       assert mounted.assigns.rows == []
     end
 
     test "the notice component renders" do
       html =
-        render_component(&GreenAsh.Components.tenant_notice/1,
-          resource: Project,
-          strategy: :attribute
+        render_component(&GreenAsh.Components.notice/1,
+          notice: %{kind: :tenant, resource: Project, strategy: :attribute}
         )
 
       assert html =~ "TENANT REQUIRED"
@@ -145,15 +156,15 @@ defmodule GreenAsh.MultitenancyTest do
 
     test "it offers no advice that would weaken tenant isolation" do
       html =
-        render_component(&GreenAsh.Components.tenant_notice/1,
-          resource: Project,
-          strategy: :attribute
+        render_component(&GreenAsh.Components.notice/1,
+          notice: %{kind: :tenant, resource: Project, strategy: :attribute}
         )
 
       # A debug console must not tell anyone to make a tenant-scoped resource
-      # global? to read it: that disables tenant enforcement app-wide.
+      # global? to read it: that disables tenant enforcement app-wide. The way
+      # out it does offer is the one that keeps isolation intact.
       refute html =~ "global? true"
-      assert html =~ "not supported yet"
+      assert html =~ ":tenant"
     end
 
     test "Subfile's own render clause reaches the notice, not just its assigns" do
@@ -209,8 +220,7 @@ defmodule GreenAsh.MultitenancyTest do
     end
 
     test "an ordinary resource still renders its real screen" do
-      {:ok, mounted} =
-        GreenAsh.Live.Subfile.mount(%{"resource" => "org", "action" => "read"}, %{}, socket(%{}))
+      {:ok, mounted} = mount_list("org", "read")
 
       html = render_view(GreenAsh.Live.Subfile, mounted.assigns)
 

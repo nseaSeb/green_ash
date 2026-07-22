@@ -8,7 +8,7 @@ defmodule GreenAsh.RegistryTest do
 
   test "resource discovery and resolution by slug" do
     assert Account in Registry.resources(@domains)
-    assert Registry.resource_slug(Account) == "account"
+    assert Registry.resource_slug(Account, @domains) == "account"
     assert Registry.resource_by_slug(@domains, "account") == Account
     assert Registry.resource_by_slug(@domains, "unknown") == nil
   end

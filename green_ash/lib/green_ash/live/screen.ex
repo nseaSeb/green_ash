@@ -9,27 +9,52 @@ defmodule GreenAsh.Live.Screen do
 
   @impl true
   def mount(%{"resource" => slug} = params, _session, socket) do
-    %{domains: domains, base: base, actor: actor} = socket.assigns
+    %{domains: domains, base: base, actor: actor, tenant: tenant} = socket.assigns
 
-    case Registry.resource_by_slug(domains, slug) do
-      nil ->
+    with {:ok, resource} <- fetch_resource(domains, slug),
+         :ok <- check_tenant(resource, tenant),
+         {:ok, action} <- fetch_action(resource, params["action"]) do
+      mount_action(socket, resource, action, params, actor, base)
+    else
+      :no_resource ->
         {:ok, push_navigate(socket, to: base)}
 
-      resource ->
-        if Registry.tenant_required?(resource) do
-          # Escape leads to the menu, not to the list: the list is just as
-          # unopenable, so return_to would otherwise bounce between screens.
-          {:ok, socket |> assign_tenant_notice(resource) |> assign(return_to: base)}
-        else
-          mount_action(socket, resource, params, actor, base)
-        end
+      {:notice, notice} ->
+        # Escape leads to the menu, not to the list: for a tenant-required
+        # resource the list is just as unopenable, so return_to would
+        # otherwise bounce between screens.
+        {:ok, assign(socket, notice: notice, return_to: base)}
     end
   end
 
-  defp mount_action(socket, resource, params, actor, base) do
-    action = Registry.action(resource, params["action"])
+  defp fetch_resource(domains, slug) do
+    case Registry.resource_by_slug(domains, slug) do
+      nil -> :no_resource
+      resource -> {:ok, resource}
+    end
+  end
 
-    case load_subject(resource, params["id"], actor) do
+  # Only a refusal while no tenant is set: with one, the resource behaves like
+  # any other.
+  defp check_tenant(resource, tenant) do
+    if Registry.tenant_required?(resource) and is_nil(tenant),
+      do: {:notice, tenant_notice(resource)},
+      else: :ok
+  end
+
+  # An action name from the URL that matches none leaves `action` nil, which
+  # `Field.specs/2` cannot take — a raise inside `mount/3`, i.e. a 500.
+  defp fetch_action(resource, name) do
+    case Registry.action(resource, name) do
+      nil -> {:notice, no_action_notice(resource, name)}
+      action -> {:ok, action}
+    end
+  end
+
+  defp mount_action(socket, resource, action, params, actor, base) do
+    tenant = socket.assigns.tenant
+
+    case load_subject(resource, params["id"], actor, tenant) do
       {:ok, subject} ->
         {:ok,
          socket
@@ -37,34 +62,43 @@ defmodule GreenAsh.Live.Screen do
            resource: resource,
            action: action,
            subject: subject,
-           specs: Field.specs(resource, action),
+           specs: specs(resource, action, actor, tenant),
            result: nil,
            debug: false,
            message: socket.assigns.actor_notice || "",
-           return_to: return_to(resource, base)
+           return_to: return_to(resource, base, socket.assigns.domains)
          )
-         |> assign(form: fresh_form(subject, action, actor))}
+         |> assign(form: fresh_form(subject, action, actor, tenant))}
 
       :error ->
-        {:ok, push_navigate(socket, to: return_to(resource, base))}
+        {:ok, push_navigate(socket, to: return_to(resource, base, socket.assigns.domains))}
     end
   end
 
-  defp load_subject(resource, nil, _actor), do: {:ok, resource}
+  # Introspection plus one read for the relationship pickers — see
+  # `GreenAsh.Field.with_options/3` for what it refuses to guess.
+  defp specs(resource, action, actor, tenant) do
+    resource |> Field.specs(action) |> Field.with_options(actor, tenant)
+  end
 
-  defp load_subject(resource, token, actor) do
+  defp build_specs(%{assigns: assigns}),
+    do: specs(assigns.resource, assigns.action, assigns.actor, assigns.tenant)
+
+  defp load_subject(resource, nil, _actor, _tenant), do: {:ok, resource}
+
+  defp load_subject(resource, token, actor, tenant) do
     with {:ok, id} <- Registry.decode_pk(resource, token),
-         {:ok, record} <- Ash.get(resource, id, actor: actor) do
+         {:ok, record} <- Ash.get(resource, id, actor: actor, tenant: tenant) do
       {:ok, record}
     else
       _ -> :error
     end
   end
 
-  defp return_to(resource, base) do
+  defp return_to(resource, base, domains) do
     case Ash.Resource.Info.primary_action(resource, :read) do
       nil -> base
-      read -> ga_path(base, "/r/#{Registry.resource_slug(resource)}/list/#{read.name}")
+      read -> ga_path(base, "/r/#{Registry.resource_slug(resource, domains)}/list/#{read.name}")
     end
   end
 
@@ -78,11 +112,23 @@ defmodule GreenAsh.Live.Screen do
     case AshPhoenix.Form.submit(ash_form(socket.assigns.form), params: params) do
       {:ok, result} ->
         if socket.assigns.action.type == :create do
+          # A create leaves you here to make another, so the screen is rebuilt
+          # rather than reused: the specs are re-read too, not just the form.
+          # A resource pointing at itself — `belongs_to :mentor, Author` — must
+          # offer the author you just created to the next one, and any picker
+          # whose records changed under you would otherwise stay as it was.
           {:noreply,
            socket
            |> assign(result: {:ok, result})
+           |> assign(specs: build_specs(socket))
            |> assign(
-             form: fresh_form(socket.assigns.subject, socket.assigns.action, socket.assigns.actor)
+             form:
+               fresh_form(
+                 socket.assigns.subject,
+                 socket.assigns.action,
+                 socket.assigns.actor,
+                 socket.assigns.tenant
+               )
            )}
         else
           {:noreply, push_navigate(socket, to: socket.assigns.return_to)}
@@ -108,8 +154,8 @@ defmodule GreenAsh.Live.Screen do
   def handle_event("keydown", _key, socket), do: {:noreply, socket}
 
   # subject = the resource (create) or the loaded record (update/destroy).
-  defp fresh_form(subject, action, actor) do
-    subject |> AshPhoenix.Form.for_action(action.name, actor: actor) |> to_form()
+  defp fresh_form(subject, action, actor, tenant) do
+    subject |> AshPhoenix.Form.for_action(action.name, actor: actor, tenant: tenant) |> to_form()
   end
 
   defp ash_form(%Phoenix.HTML.Form{source: %AshPhoenix.Form{} = f}), do: f
@@ -119,9 +165,9 @@ defmodule GreenAsh.Live.Screen do
   defp select_prompt(_), do: nil
 
   @impl true
-  def render(%{tenant_notice: true} = assigns) do
+  def render(%{notice: _} = assigns) do
     ~H"""
-    <.tenant_notice resource={@resource} strategy={@strategy} />
+    <.notice notice={@notice} />
     """
   end
 
@@ -132,7 +178,7 @@ defmodule GreenAsh.Live.Screen do
       <div class="crt-head">
         <span>GREEN·ASH / {String.upcase(short(@resource))}</span>
         <span class="crt-title">{Registry.action_label(@action)}</span>
-        <span>◆ {Actor.label(@actor)} · {@action.name} · {@action.type}</span>
+        <span>◆ {Actor.label(@actor)}{tenant_suffix(@tenant)} · {@action.name} · {@action.type}</span>
       </div>
       <div class="crt-rule"></div>
 
@@ -191,5 +237,11 @@ defmodule GreenAsh.Live.Screen do
   defp short(module), do: module |> Module.split() |> List.last()
 
   defp label(%{kind: :argument} = spec), do: spec.label <> " (arg)"
+
+  # A picker is showing related records, so name the relationship rather than
+  # the column it writes to: "Account", not "Account id".
+  defp label(%{relationship: rel, input_type: "select"}) when not is_nil(rel),
+    do: rel.name |> Phoenix.Naming.humanize() |> to_string()
+
   defp label(spec), do: spec.label
 end

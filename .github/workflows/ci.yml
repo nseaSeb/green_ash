@@ -1,0 +1,117 @@
+name: CI
+
+# Complements docker/verify.sh rather than replacing it. That script is the
+# pre-publish gate: a clean room, a real `mix igniter.install` from GitHub,
+# the full version matrix. This runs on every push, so it has to be fast —
+# same matrix for the library, one version for the examples.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  library:
+    name: library (elixir ${{ matrix.elixir }} / otp ${{ matrix.otp }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: '1.15'
+            otp: '25'
+          - elixir: '1.17'
+            otp: '26'
+          - elixir: '1.19'
+            otp: '28'
+            lint: true
+
+    defaults:
+      run:
+        working-directory: green_ash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # A library does not commit its mix.lock — the consumer resolves it — so
+      # the cache is keyed on mix.exs and the resolution is allowed to drift.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            green_ash/deps
+            green_ash/_build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('green_ash/mix.exs') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - run: mix deps.get
+
+      - run: mix compile --warnings-as-errors
+
+      # Only on the newest pair: the formatter's output moves between Elixir
+      # versions, so checking it everywhere reports style differences as
+      # failures on the older ones.
+      - if: matrix.lint
+        run: mix format --check-formatted
+
+      - run: mix test
+
+  examples:
+    name: example ${{ matrix.app }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [bank, library]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.app }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '28'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            examples/${{ matrix.app }}/deps
+            examples/${{ matrix.app }}/_build
+          key: ${{ runner.os }}-mix-${{ matrix.app }}-${{ hashFiles(format('examples/{0}/mix.lock', matrix.app)) }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.app }}-
+
+      - run: mix deps.get
+
+      - run: mix compile --warnings-as-errors
+
+      - run: mix format --check-formatted
+
+      # The `test` alias creates and migrates the database first.
+      - run: mix test
+        env:
+          MIX_ENV: test

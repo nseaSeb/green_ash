@@ -3,14 +3,25 @@ defmodule GreenAsh.Router do
   Integration into the host's router.
 
   Place it in a `scope` going through a pipeline with a session
-  (`fetch_session`), typically `:browser`:
+  (`fetch_session`), typically `:browser`, and behind a dev-only guard:
 
-      import GreenAsh.Router
+      if Application.compile_env(:my_app, :dev_routes) do
+        import GreenAsh.Router
 
-      scope "/" do
-        pipe_through :browser
-        green_ash "/cli"
+        scope "/" do
+          pipe_through :browser
+          green_ash "/cli"
+        end
       end
+
+  > #### Gate it {: .warning}
+  >
+  > The console has no access control of its own. It lists, creates, updates
+  > and deletes any record of any exposed resource, and `:actor` loads any
+  > record as the current actor — impersonation is the point of the tool.
+  > Reachable in production, it is an unauthenticated admin panel over your
+  > whole domain. `mix green_ash.install` writes the guard above for you;
+  > mounting by hand is the path where nothing does.
 
   By default, the exposed domains are read **dynamically, on every request**
   from `Application.get_env(:my_app, :ash_domains, [])` — the same config key
@@ -47,7 +58,8 @@ defmodule GreenAsh.Router do
         end
 
       scope path, alias: false, as: false do
-        get "/actor", GreenAsh.ActorController, :set
+        get "/actor", GreenAsh.SessionController, :actor
+        get "/tenant", GreenAsh.SessionController, :tenant
 
         live_session :green_ash,
           session: %{

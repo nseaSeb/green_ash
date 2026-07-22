@@ -5,11 +5,12 @@ defmodule GreenAsh.Command do
   and resources are resolved among `domains`.
 
   Internal directives: `{:navigate, path}`, `{:redirect, path}`,
-  `{:message, text}`, `:toggle_debug`, `:whoami`, `:noop`, `:not_command`.
+  `{:message, text}`, `{:columns, names}`, `:toggle_debug`, `:whoami`,
+  `:noop`, `:not_command`.
   """
-  alias GreenAsh.{Actor, Registry}
+  alias GreenAsh.{Actor, Registry, Tenant}
 
-  @help "Commands: :menu  :list <r>  :new <r>  :actor <r> <id>  :actor none  :whoami  :debug  :help  :q"
+  @help "Commands: :menu  :list <r>  :new <r>  :cols <f...>  :actor <r> <id>  :tenant <v>  :whoami  :debug  :help  :q"
 
   def help, do: @help
 
@@ -18,10 +19,12 @@ defmodule GreenAsh.Command do
 
   Reads `socket.assigns.base` and `socket.assigns.domains`. Options:
     * `:on_debug` — `fn socket -> {:noreply, socket} end`;
+    * `:on_columns` — `fn names, socket -> {:noreply, socket} end`;
     * `:on_other` — `fn input, socket -> {:noreply, socket} end` (input without `:`).
   """
   def apply_to(socket, input, opts \\ []) do
     on_debug = Keyword.get(opts, :on_debug, &default_debug/1)
+    on_columns = Keyword.get(opts, :on_columns, &default_columns/2)
     on_other = Keyword.get(opts, :on_other, &default_other/2)
     %{base: base, domains: domains} = socket.assigns
 
@@ -36,12 +39,10 @@ defmodule GreenAsh.Command do
         {:noreply, Phoenix.Component.assign(socket, :message, msg)}
 
       :whoami ->
-        {:noreply,
-         Phoenix.Component.assign(
-           socket,
-           :message,
-           "Actor: " <> Actor.label(socket.assigns.actor)
-         )}
+        {:noreply, Phoenix.Component.assign(socket, :message, whoami(socket.assigns))}
+
+      {:columns, names} ->
+        on_columns.(names, socket)
 
       :toggle_debug ->
         on_debug.(socket)
@@ -54,8 +55,22 @@ defmodule GreenAsh.Command do
     end
   end
 
+  # The tenant decides which rows exist at all, so it belongs beside the actor
+  # whenever you ask who you are.
+  defp whoami(%{actor: actor} = assigns) do
+    case Tenant.label(Map.get(assigns, :tenant)) do
+      nil -> "Actor: " <> Actor.label(actor)
+      tenant -> "Actor: " <> Actor.label(actor) <> " · " <> tenant
+    end
+  end
+
   defp default_debug(socket),
     do: {:noreply, Phoenix.Component.assign(socket, :message, "Debug mode unavailable here.")}
+
+  defp default_columns(_names, socket),
+    do:
+      {:noreply,
+       Phoenix.Component.assign(socket, :message, "Columns apply to a list screen (:list <r>).")}
 
   defp default_other(_input, socket),
     do:
@@ -80,6 +95,26 @@ defmodule GreenAsh.Command do
   defp command(c, _, _, _) when c in ~w(whoami who), do: :whoami
   defp command(c, _, _, _) when c in ~w(help h ?), do: {:message, @help}
 
+  # Column choice belongs to whichever list screen is open, so the command only
+  # carries the names; the screen validates them against what it renders.
+  defp command(c, args, _base, _domains) when c in ~w(cols columns), do: {:columns, args}
+
+  # Bare `:tenant` reports rather than clears. Clearing is destructive — every
+  # multitenant screen closes behind it — and `:cols` alone already means
+  # "tell me", so the same keystroke must not mean "undo" here.
+  defp command("tenant", [], _base, _domains), do: :whoami
+
+  defp command("tenant", ["none"], base, _),
+    do: {:redirect, "#{base}/tenant?return=#{URI.encode_www_form(base)}"}
+
+  defp command("tenant", [value], base, _),
+    do:
+      {:redirect,
+       "#{base}/tenant?value=#{URI.encode_www_form(value)}&return=#{URI.encode_www_form(base)}"}
+
+  defp command("tenant", _, _, _),
+    do: {:message, "Usage: :tenant <value>  |  :tenant none"}
+
   defp command("actor", ["none"], base, _),
     do: {:redirect, "#{base}/actor?return=#{URI.encode_www_form(base)}"}
 
@@ -94,8 +129,11 @@ defmodule GreenAsh.Command do
   defp command(c, [slug], base, domains) when c in ~w(list ls l) do
     with_resource(domains, slug, fn resource ->
       case Ash.Resource.Info.primary_action(resource, :read) do
-        nil -> {:message, "No primary read for #{slug}."}
-        read -> {:navigate, "#{base}/r/#{Registry.resource_slug(resource)}/list/#{read.name}"}
+        nil ->
+          {:message, "No primary read for #{slug}."}
+
+        read ->
+          {:navigate, "#{base}/r/#{Registry.resource_slug(resource, domains)}/list/#{read.name}"}
       end
     end)
   end
@@ -103,8 +141,11 @@ defmodule GreenAsh.Command do
   defp command(c, [slug], base, domains) when c in ~w(new open create) do
     with_resource(domains, slug, fn resource ->
       case Ash.Resource.Info.primary_action(resource, :create) do
-        nil -> {:message, "No primary create for #{slug}."}
-        create -> {:navigate, "#{base}/r/#{Registry.resource_slug(resource)}/a/#{create.name}"}
+        nil ->
+          {:message, "No primary create for #{slug}."}
+
+        create ->
+          {:navigate, "#{base}/r/#{Registry.resource_slug(resource, domains)}/a/#{create.name}"}
       end
     end)
   end

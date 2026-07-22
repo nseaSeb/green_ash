@@ -1,7 +1,8 @@
 defmodule GreenAsh.OnMount do
   @moduledoc """
   `on_mount` set by the router macro: injects into each LiveView the list of
-  domains, the mount base, and the current actor (resolved from the session).
+  domains, the mount base, the current tenant, and the current actor
+  (resolved from the session, within that tenant).
 
   When an actor is stored in the session but cannot be loaded, `actor` is nil
   and `actor_notice` carries the reason for the screen to display — see
@@ -18,9 +19,10 @@ defmodule GreenAsh.OnMount do
     config = session["green_ash"] || %{}
     domains = domains(config)
     base = Map.get(config, "base", "/")
+    tenant = GreenAsh.Tenant.from_session(session)
 
     {actor, notice} =
-      case GreenAsh.Actor.resolve(session, domains) do
+      case GreenAsh.Actor.resolve(session, domains, tenant) do
         {:ok, record} -> {record, nil}
         :none -> {nil, nil}
         {:error, message} -> {nil, message}
@@ -30,6 +32,7 @@ defmodule GreenAsh.OnMount do
      assign(socket,
        domains: domains,
        base: base,
+       tenant: tenant,
        actor: actor,
        actor_notice: notice
      )}

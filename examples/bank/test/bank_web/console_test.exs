@@ -91,7 +91,7 @@ defmodule BankWeb.ConsoleTest do
     assert html =~ "Account:"
   end
 
-  test "belongs_to relationship: menu lists Transaction, account_id renders as text, creation OK",
+  test "belongs_to relationship: the account is picked from a list, not typed as a UUID",
        %{conn: conn} do
     {:ok, _view, menu_html} = live(conn, "/cli")
     assert menu_html =~ "Transactions"
@@ -99,8 +99,13 @@ defmodule BankWeb.ConsoleTest do
     acc = open_account("Alice", "100")
 
     {:ok, view, html} = live(conn, "/cli/r/transaction/a/create")
-    # Ash.Type.UUID must render as a text field, not fall back to textarea/JSON.
-    assert html =~ ~s(type="text" id="form_account_id" name="form[account_id]")
+
+    # The foreign key is a choice of real records now. It used to render as a
+    # text box wanting a raw id, which meant leaving the console to find one.
+    assert html =~ ~s(<select id="form_account_id")
+    assert html =~ "Alice"
+    assert html =~ String.slice(acc.id, 0, 8)
+    refute html =~ ~s(type="text" id="form_account_id")
 
     view
     |> form("form[phx-submit='submit']", form: %{"account_id" => acc.id, "amount" => "42"})
@@ -110,5 +115,127 @@ defmodule BankWeb.ConsoleTest do
              Ash.read!(Bank.Ledger.Transaction, authorize?: false),
              &(&1.account_id == acc.id and Decimal.equal?(&1.amount, Decimal.new("42")))
            )
+  end
+
+  describe "a read Ash insists on paginating" do
+    # `:recent` declares `keyset?: true, offset?: false, required?: true`. Ash
+    # refuses such a read without page options — the console used to reach it
+    # with a plain limit/offset and take the whole screen down. ETS is too
+    # permissive to test this; Postgres is what users run.
+    setup do
+      for n <- 1..25 do
+        open_account("H#{String.pad_leading(to_string(n), 2, "0")}", "0")
+      end
+
+      :ok
+    end
+
+    # Anchored to the cell, not scanned over the whole page: LiveView's session
+    # token is random base64 in the markup, and it occasionally contains
+    # something matching a bare /H\d\d/. That made this test fail on roughly
+    # one seed in twenty, for a reason that had nothing to do with paging.
+    defp holders(html) do
+      ~r|<td[^>]*>\s*(H\d\d)\s*</td>|
+      |> Regex.scan(html)
+      |> Enum.map(&List.last/1)
+      |> Enum.uniq()
+    end
+
+    test "the list opens instead of crashing", %{conn: conn} do
+      assert {:ok, _view, html} = live(conn, "/cli/r/account/list/recent")
+
+      assert html =~ "LIST · Bank accounts"
+      assert length(holders(html)) == 20
+    end
+
+    test "paging walks the whole set, without gaps or repeats", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/cli/r/account/list/recent")
+      first = holders(html)
+
+      second = view |> element("button[phx-value-dir=next]") |> render_click() |> holders()
+
+      assert first -- (first -- second) == [], "a record appeared on both pages"
+      assert length(Enum.uniq(first ++ second)) == 25, "records were skipped between pages"
+    end
+  end
+
+  describe "the screen lives in the URL" do
+    setup do
+      for n <- 1..25, do: open_account("H#{String.pad_leading(to_string(n), 2, "0")}", "#{n}")
+      :ok
+    end
+
+    test "a pasted link reproduces filter, sort and page", %{conn: conn} do
+      {:ok, _view, html} =
+        live(conn, "/cli/r/account/list/search?filter[holder]=H2&sort=balance:desc&page=1")
+
+      # H2, H20..H25 sorted by balance desc. Read from the cells rather than
+      # the whole page: the session token is random markup that can contain
+      # anything.
+      shown = cells(html)
+
+      assert "H25" in shown
+      refute "H19" in shown
+    end
+
+    defp cells(html) do
+      ~r|<td[^>]*>\s*(H\d\d)\s*</td>|
+      |> Regex.scan(html)
+      |> Enum.map(&List.last/1)
+      |> Enum.uniq()
+    end
+
+    test "clicking a column header puts the sort in the address bar", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/cli/r/account/list/read")
+
+      view |> element("th", "Holder") |> render_click()
+
+      assert_patched(view, "/cli/r/account/list/read?sort=holder%3Aasc")
+    end
+
+    test "paging is a patch, and going back returns the first page", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/cli/r/account/list/read")
+
+      view |> element("button[phx-value-dir=next]") |> render_click()
+      assert_patched(view, "/cli/r/account/list/read?page=2")
+
+      view |> element("button[phx-value-dir=prev]") |> render_click()
+      assert_patched(view, "/cli/r/account/list/read")
+    end
+  end
+
+  describe "the tenant round trip" do
+    # No multitenant resource here — the library tests cover what a tenant
+    # does to a read. What only the host can prove is the wiring: a LiveView
+    # cannot write the session through its socket, so :tenant leaves the
+    # console, lands on a real route, and comes back.
+    test "the :tenant command sets it in the session and returns to the console",
+         %{conn: conn} do
+      conn = get(conn, "/cli/tenant", %{"value" => "acme", "return" => "/cli"})
+
+      assert redirected_to(conn) == "/cli"
+      assert get_session(conn, "green_ash_tenant") == "acme"
+    end
+
+    test "the console then shows it on every screen", %{conn: conn} do
+      open_account("Alice", "1")
+
+      conn = Plug.Test.init_test_session(conn, %{"green_ash_tenant" => "acme"})
+
+      {:ok, _view, menu} = live(conn, "/cli")
+      assert menu =~ "tenant:acme"
+
+      {:ok, _view, list} = live(conn, "/cli/r/account/list/read")
+      assert list =~ "tenant:acme"
+    end
+
+    test "clearing it removes it from the session", %{conn: conn} do
+      conn =
+        conn
+        |> Plug.Test.init_test_session(%{"green_ash_tenant" => "acme"})
+        |> get("/cli/tenant", %{"return" => "/cli"})
+
+      assert get_session(conn, "green_ash_tenant") == nil
+    end
   end
 end
