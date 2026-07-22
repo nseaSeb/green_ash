@@ -36,7 +36,10 @@ if Application.compile_env(:my_app, :dev_routes) do
 end
 ```
 
-See `green_ash/README.md` for details.
+See [`green_ash/README.md`](green_ash/README.md) for details, and
+[`green_ash/CHANGELOG.md`](green_ash/CHANGELOG.md) for what changed in each
+release. Both live in that subdirectory rather than at the root because that is
+where the published package lives — it is the copy Hex and HexDocs serve.
 
 Any Ash resource declared in an exposed domain then shows up in `/cli`:
 
